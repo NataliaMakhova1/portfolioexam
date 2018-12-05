@@ -1,0 +1,339 @@
+---
+title: "Assignment 1 - Language Development in ASD - part 2"
+author: "[Natalia Makhova]"
+date: "[12/09/2018]"
+output: html_document
+---
+    
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# you could optionally set include = TRUE globally while working on the exercise and then just change it to include = FALSE before you hand in
+# knitr::opts_chunk$set(include = FALSE)
+```
+
+# Template for the hand-in
+### Structure of the code chunks
+
+Basic stuff:
+- Loading the libraries
+- Setting the directory and loading the data
+- Look at the data (which variables are there? Are they in the right format?) and describe the participants (by diagnosis)
+
+We will try to answer three questions:
+    
+- Do children with ASD develop language differently from non-ASD children?
+- Do parents speak differently to children with ASD than to non-ASD ones?
+- Which variables should we use to best explain the child linguistic performance?
+
+### Loading the relevant libraries
+
+Load necessary libraries : what will you need?
+
+- e.g. something to plot with
+- e.g. mixed effects models
+
+```{r Load Libraries, include = FALSE}
+setwd("C:/Users/natal/Google Drive/study/3 semester/EM3/assignment1")
+
+library(dplyr)
+library(pacman)
+library(tidyverse)
+library(stringr)
+
+library(lmerTest)
+
+library(MuMIn)
+library(ggplot2)
+library(sjPlot)
+
+
+
+```
+
+### Define your working directory and load the data
+If you created a project for this class and opened this Rmd file from within that project, your working directory is your project directory.
+
+If you opened this Rmd file outside of a project, you will need some code to find the data:
+- Create a new variable called locpath (localpath)
+- Set it to be equal to your working directory
+- Move to that directory (setwd(locpath))
+- Load the data you saved last time (use read_csv(fileName))
+
+If your're in a project, just put the data in the project folder and you're good to go! (Or make a data subfolder to keep it tidy around here)
+```{r Load Data, include = FALSE}
+
+#getwd()
+#locpath=
+#setwd(locpath)
+#Data =
+#done in previous
+```
+
+### Characterize the participants (Exercise 1)
+
+Identify relevant variables: participants demographic characteristics, diagnosis, ADOS, Verbal IQ, Non Verbal IQ, Visit, Number of words used, Number of unique words used, length of utterance in both child and parents.
+
+Make sure the variables are in the right format.
+
+Describe the characteristics of the two groups of participants and whether the two groups are well matched.
+
+```{r descriptive stats, include = FALSE}
+#B- has small or 0 at ADOS, so we think that this is indication for non autism
+#A - has high number, so we think, it's equals to autistic children
+
+diagnisisA <-filter(merged_data, Diagnosis == "A")
+diagnisisB <-filter(merged_data, Diagnosis == "B")
+#we have 20 more non-autistic participants
+
+hist(diagnisisA$tokens_CHI)
+#most of the children use very little amount of words, so A is autistic children
+hist(merged_data$tokens_CHI)
+hist(diagnisisB$tokens_CHI)
+
+#MLU - mean length of how long words are
+
+hist(diagnisisA$CHI_MLU)
+hist(diagnisisB$CHI_MLU)
+
+hist(merged_data$Diagnosis)
+newXa <- sapply(merged_data$Diagnosis, as.numeric)
+hist(newXa)
+
+hist(merged_data$Age)
+hist(diagnosisASD$Age)# from 15 to 65
+hist(diagnosisTD$Age)#from 15 - 50
+hist(merged_data$MOT_MLU)
+hist(diagnosisASD$MOT_MLU)
+hist(diagnosisTD$MOT_MLU)
+
+hist(merged_data$CHI_MLU)#according to histogram CHI_MLU was highest between 1 and 1,5 
+
+hist(diagnosisASD$CHI_MLU)#most from 1 - 1.5 said the most
+hist(diagnosisTD$CHI_MLU)# said much more
+
+hist(diagnosisASD$types_MOT)
+hist(diagnosisTD$types_MOT)
+
+hist(merged_data$types_CHI)
+hist(diagnosisASD$types_CHI)#most up to 50
+hist(diagnosisTD$types_CHI)#normaly distributed
+
+hist(merged_data$tokens_MOT)
+
+hist(merged_data$tokens_CHI)
+hist(diagnosisASD$tokens_CHI)#most from 0-200
+hist(diagnosisTD$tokens_CHI)# said most words up to 800
+
+hist(merged_data$ADOS)#most from 0 to 5
+
+hist(merged_data$nonverbalIQ)
+hist(diagnosisASD$nonverbalIQ)#most from 25 to 30
+hist(diagnosisTD$nonverbalIQ)#most 40 -45
+
+hist(merged_data$verbalIQ)
+hist(diagnosisASD$verbalIQ)
+hist(diagnosisTD$verbalIQ)
+```
+
+[REPORT THE RESULTS]
+Participants samples are well balanced according to
+Diagnosis - almost the same number of participants, 10 more  TD participants
+Age- both groups are ranging approx. from 15-60 years
+Types_MOT  - spread all over but are slightly different, ASD group peaks at 350 and TD  group peaks at 400 
+
+not well balanced
+MLU_MOT - mothers of TD children has slightly higher mean than ASD group
+CHI_MLU - TD group says much more words while ASD group says the most from 1-1,5
+types_CHI - ASD group says much less(up to 50) unique words in comparison to TD group (up to 200)
+token_CHI - TD group said much more words (up to 800) while ASD up to 200
+
+#Reason is that there are two groups autistic children and normal children
+#Let's test hypothesis 1: Children with ASD display a language impairment  (Exercise 2)
+
+### Hypothesis: The child's MLU changes: i) over time, ii) according to diagnosis
+
+Let's start with a simple mixed effects linear model
+
+Remember to plot the data first and then to run a statistical test.
+- Which variable(s) should be included as fixed factors?
+- Which variable(s) should be included as random factors?
+
+```{r ex2, include = FALSE}
+merged_data$SUBJ <- as.character(merged_data$SUBJ)
+merged_data <- as.data.frame(merged_data)
+
+#model with intercept
+model1 = lmer(CHI_MLU~VISIT +(1|SUBJ), merged_data, REML = F)
+
+summary(model1)
+r.squaredGLMM(model1)
+#plotting the 1st model, to see how it's prsented first byslope, then by intercept
+ggplot(model1,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+  geom_smooth(method = "lm", se = F)+theme(legend.position = "none")
+ ggplot(model1,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+   geom_boxplot() + theme(legend.position = "none")
+
+ #checking residuals for 1st model
+ qqnorm(residuals(model1))
+ plot(residuals(model1))
+ hist(residuals(model1))
+  
+#visit-slope, subj - intercept
+
+# according to diagnosis - according to diagnosis
+model_diagnosis <- lmer(CHI_MLU~Diagnosis +(1|SUBJ), merged_data, REML = F)
+summary(model_diagnosis)
+r.squaredGLMM(model_diagnosis)
+
+#plotting
+#checking residuals
+#we are also interested in time, so we need time (VISIT) as IV (fixed effect). we can use/rely on the model with diagnosis only 
+ 
+#adding slope - over time
+  model3<-lmer(CHI_MLU~VISIT +(1+VISIT|SUBJ), merged_data, REML = F)
+summary(model3)
+r.squaredGLMM(model3)
+ 
+ggplot(model3,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+  geom_smooth(method = "lm", se = F) + theme(legend.position = "none")
+ ggplot(model3,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+   geom_boxplot() +  facet_wrap(~Diagnosis) + theme(legend.position = "none")
+
+qqnorm(residuals(model3))
+plot(residuals(model3))
+hist(residuals(model3))
+
+
+
+ #adding visit (over time +Diagnosis)
+ model2<-lmer(CHI_MLU~VISIT +Diagnosis +(1+VISIT|SUBJ), merged_data, REML = F)
+summary(model2)
+r.squaredGLMM(model2)
+
+#plotting
+ggplot(model2,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+  geom_smooth(method = "lm", se = F) + theme(legend.position = "none")
+ ggplot(model2,aes(x=VISIT, y=CHI_MLU, group=SUBJ, color=SUBJ)) +
+   geom_boxplot() + theme(legend.position = "none")
+ 
+ #checking residuals
+ qqnorm(residuals(model2))
+hist(residuals(model2))
+plot(residuals(model2))
+ 
+
+#making model comparison using anova
+
+anova(model1, model2, model3, model_interaction) 
+#accroding to anova model_interaction is the best to use.
+## to report: we can't use just diagnosis. need to add visit. visit +diagnodis  = diagnosis not significt.
+
+```
+
+How would you evaluate whether the model is a good model?
+
+```{r ex2 evaluate, include = FALSE}
+#Althoug our model looks good, p value is low and r-squared is high, when we plot it, we can observe that slopes do not look normal. However, most our data explained by random factors, thus we can't generalize it. As we can see form plot data distribution for children without autistic diagnosis looks normal, and we can in general make some assumptions from it. however, if we look to plot with autistic children, we can clearly see random distribution, without any patterns, which unables us to make any assumptions.
+
+```
+
+Not too good, right? Let's check whether a growth curve model is better.
+Remember: a growth curve model assesses whether changes in time can be described by linear, or quadratic, or cubic (or... etc.) components.
+First build the different models, then compare them to see which one is better
+
+```{r ex2 growth curve, include = FALSE}
+#trying to do quadratic
+model_quadratic1 <-lmer(CHI_MLU~VISIT*Diagnosis + I(VISIT^2)*Diagnosis +(1+VISIT+I(VISIT^2)|SUBJ), merged_data, REML = F)
+summary(model_quadratic1)
+r.squaredGLMM(model_quadratic1)
+
+#plotting with slope and then with intercept
+plot_model(model_quadratic1, type = "eff", terms = "VISIT")
+qqnorm(residuals(model_quadratic1))
+hist(residuals(model_quadratic1))
+plot(residuals(model_quadratic1))
+
+#trying to do cubic
+model_cubic1<-lmer(CHI_MLU~VISIT*Diagnosis+I(VISIT^2)*Diagnosis +I(VISIT^3)*Diagnosis +(1+VISIT+I(VISIT^2) +I(VISIT^3)|SUBJ), merged_data,  REML = F)
+summary(model_cubic1)
+r.squaredGLMM(model_cubic1)
+
+#plotting
+plot_model(model_cubic1, type = "eff", terms = "VISIT")
+qqnorm(residuals(model_cubic1))
+hist(residuals(model_cubic1))
+plot(residuals(model_cubic1))
+
+
+#rsiduals distribution is normal for both quadratic and cubic, thus we can make comparison by using anova
+
+#doing interactions
+model_interaction <- lmer(CHI_MLU~VISIT*Diagnosis + (1+VISIT|SUBJ), merged_data,  REML = F)
+summary(model_interaction)
+
+anova(model_interaction, model_quadratic1, model_cubic1)
+#ANOVA comparison showed that the best is cubic model with interaction
+
+```
+
+Report:
+1. Cubic model report:
+β = -0.006150,(SE = 0.005889), t = -1.044
+
+2. Model comparsion (rejection of null hypothesis)
+As we can see from anova anylysis both models have significant p-value, however, we choose model cubic to be the best to explain our data due to smaller value of logLik, logLik= -252.84, p< 0.001.
+
+
+## Let's test hypothesis 2: Parents speak equally to children with ASD and TD  (Exercise 3)
+
+### Hypothesis: Parental MLU changes: i) over time, ii) according to diagnosis
+
+```{r ex3, include = FALSE}
+model_mother1 <- lmer(MOT_MLU ~ VISIT  + (1+VISIT |SUBJ), merged_data, REML = FALSE)
+summary(model_mother1)
+r.squaredGLMM(model_mother1)
+
+
+model_mother_diagnosis <- lmer(MOT_MLU ~ VISIT + Diagnosis + (1+VISIT |SUBJ), merged_data, REML = FALSE)
+summary(model_mother_diagnosis)
+r.squaredGLMM(model_mother_diagnosis)
+#diagnosis is a significant predictor of mother's MLU, when we go from 
+
+
+
+qqnorm(residuals(model_mother1))
+hist(residuals(model_mother1))
+plot(residuals(model_mother1))
+qqnorm(residuals(model_mother_diagnosis))
+hist(residuals(model_mother_diagnosis))
+plot(residuals(model_mother_diagnosis))
+
+anova(model_mother1, model_mother_diagnosis)
+#model 1 is better, because diagnosis is significant predictor
+
+ggplot(merged_data, aes(x = VISIT, y = MOT_MLU, colour = SUBJ),
+colour=rainbow) + geom_smooth(method = "lm", se = FALSE) +theme(legend.position = "none")+ facet_grid(. ~ Diagnosis)
+
+```
+
+[REPORT THE RESULTS]
+According to our analysis, mothers' MLU changes depending on Diagnosis. And diagnosis is a significant predictor as well as time (in our case Visit) This might suggest that knowing of diagnosis changes mothers' speech accordingly.
+
+### Adding new variables (Exercise 4)
+
+Your task now is to figure out how to best describe the children linguistic trajectory. The dataset contains a bunch of additional demographic, cognitive and clinical variables (e.g.verbal and non-verbal IQ). Try them out and identify the statistical models that best describes your data (that is, the children's MLU). Describe how you selected the best model and send the code to run the model to Malte (au540041@post.au.dk).
+
+
+```{r ex4, include = FALSE}
+cor.test(merged_data$types_CHI, merged_data$CHI_MLU)
+
+cor.test(merged_data$VISIT, merged_data$CHI_MLU)
+```
+
+```{r ex4, include = FALSE}
+#[REPORT THE RESULTS]
+#In order to identify best model, that describes our data, we have chosen as independant variable VISIT to predict Child MLU because we are interested in linguitic trajectory. We believe that we can't use additional clinical variables (e.g. noverbalIQ or ADOS), because they were collected not every visit, thus we don't have enough data. Additionally, we see no difference in variable AGE and Visit, so it makes no sence to add Age as IV. In our opinion, ethnicity and gender plays no role.
+#We assume that child MLU is calculated from overall amount of words, which is token_CHI variable. Therefore it is not reasonable to make token_CHI as predictor. We did correlation analysis between CHI_MLU and types_chi and we discovered strong correlation, thus it violates absence of collinearity. Also it safe to assume that types_chi is a part of token_chi. In our opinion trying to predict one index of liguistic performance, which is Child MLU, by another index of linguistic performance doesn'tmake much sense, because CHI-MLU was calculated from parts of it. Also if we do so, our main predictor, which is VISIT becomes not significant. However, our main priority is to see linguistic trajectory over time. 
+#Originally the idea was that Diagnosis could be a significant predictor, however, earlier in the code it was clear that diagnosis is not significant.
+```
+

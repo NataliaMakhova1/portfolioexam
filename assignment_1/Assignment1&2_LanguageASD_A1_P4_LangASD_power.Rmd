@@ -1,0 +1,85 @@
+---
+title: "Assignment 1 - Language Development in ASD - part 4"
+author: "Katarina, Maria, Natalia, Alexandra"
+date: "August 10, 2017"
+output: html_document
+---
+
+
+## Welcome to the fourth exciting part of the Language Development in ASD exercise
+
+In this exercise we will assess how many participants we would need to adequately replicate our findings (ensuring our sample size is adequate, our alpha at 0.05 and our beta at 0.8).
+```{r}
+library(lmerTest)
+library(Metrics)
+library(stringr)
+library(dplyr)
+
+library(data.table)
+library(ggplot2)
+library(stringi)
+library(stringr)
+library(tidyverse)
+library(zoo)
+library(plyr)
+library(MuMIn)
+library(modelr)
+library(ModelMetrics)
+library(simr)
+
+setwd("C:/Users/natal/Google Drive/study/3 semester/EM3/assignment1")
+
+
+```
+
+
+### Exercise 1
+
+How much power does your study have (if your model estimates are quite right)?
+- [GitHub]Load your dataset, fit your favorite model, assess power for your main effects and interactions of interest.
+- Report the power analysis and comment on what you can (or cannot) use its estimates for.
+
+```{r}
+#loading data from previous 
+full_data <- read.csv("full_data.csv")
+full_data$X <- NULL
+
+
+model<-lmer(CHI_MLU~VISIT*Diagnosis+I(VISIT^2)*Diagnosis +I(VISIT^3)*Diagnosis +(1+VISIT+I(VISIT^2)+I(VISIT^3)|SUBJ), full_data,  REML = F)
+summary(model)
+
+#we need train data
+
+train_data <- read.csv("demo_test_real.csv")
+train_data$X <- NULL
+
+#in order to assess power we need to have effect size, sample size (which is our data), variability in the sample
+
+Model=lmer(CHI_MLU~VISIT*Diagnosis+I(VISIT^2)*Diagnosis +I(VISIT^3)*Diagnosis +(1|SUBJ), train_data, REML=F)
+
+powerV = simr::powerSim(ModelV, simr::fixed("VISIT", method="t" ), nsim=200)
+#nsim - number of simulation, how many of those times, we have p value less than 0.05
+powerV
+
+powerD = powerSim(Model ,simr::fixed("DiagnosisB", method = "t"),nsim=200)
+powerD
+
+powerI = powerSim(Model, simr:: fixed("VISIT:DiagnosisB", method = "t"),nsim=200)
+powerI
+
+
+```
+### Exercise 2
+
+How would you perform a more conservative power analysis?
+- Identify and justify a minimum effect size for each of your relevant effects
+- [GitHub] take the model from exercise 1 and replace the effects with the minimum effect size that you'd accept.
+- [GitHub] assess the power curve by Child.ID, identifying an ideal number of participants to estimate each effect 
+- [GitHub] if your power estimates do not reach an acceptable threshold simulate additional participants and repeat the previous analysis
+- Report the power analysis and comment on what you can (or cannot) use its estimates for. #makelmer (makeglmer just for liner regression)
+
+
+### Exercise 3
+
+Assume you have only the resources to collect 30 kids (15 with ASD and 15 TDs). Identify the power for each relevant effect and discuss whether it's worth to run the study and why
+#pick just half

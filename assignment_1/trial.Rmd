@@ -1,0 +1,165 @@
+---
+title: "trial"
+author: "Natalia Makhova"
+date: '2 октября 2018 г '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+merged_data <- read.csv("merged_data.csv")
+model <- lmer(CHI_MLU~VISIT* Diagnosis+I(VISIT^2)*Diagnosis +I(VISIT^3)* Diagnosis +(1+VISIT+I(VISIT^2) +I(VISIT^3)|SUBJ),merged_data, REML = F)
+summary(model)
+
+#doing B
+##root mean square error = rmse
+
+preds <- predict(model, type= "response")
+
+rmse(merged_data$CHI_MLU, preds)#0.2570438
+
+#doiong C
+demo_test<- read.csv("demo_test.csv")
+#we see dots in the end of the names, extra variables, rename collumn, mullenrae into nonverbalIQ, expressivelangraw into verbalIQ
+demo_test <- dplyr::rename(demo_test, SUBJ = Child.ID)
+demo_test$SUBJ <- str_replace_all(demo_test$SUBJ, "\\.", "")
+demo_test <- dplyr::rename(demo_test, VISIT = Visit)
+demo_test <- dplyr::select(demo_test, SUBJ, VISIT, Ethnicity, Diagnosis, Gender, Age, ADOS,  MullenRaw, ExpressiveLangRaw )
+
+demo_test <- dplyr::rename(demo_test, nonverbalIQ = MullenRaw)
+demo_test <- dplyr::rename(demo_test, verbalIQ = ExpressiveLangRaw)
+
+LU_test <- read.csv("LU_test.csv")
+LU_test$SUBJ <- str_replace_all(LU_test$SUBJ, "\\.", "")
+LU_test$VISIT <- str_extract(LU_test$VISIT,"[^vVisit.]")
+LU_test <- dplyr::select(LU_test, SUBJ, VISIT, MOT_MLU, MOT_LUstd, CHI_MLU, CHI_LUstd)
+
+token_test<- read.csv("token_test.csv")
+token_test$VISIT <- str_extract(token_test$VISIT,"[^vVisit.]")
+token_test$SUBJ <- str_replace_all(token_test$SUBJ, "\\.", "")
+LU_test$VISIT <- as.numeric(LU_test$VISIT)
+token_test$VISIT <- as.numeric(token_test$VISIT)
+
+m1 <- full_join(LU_test, token_test, by = c("SUBJ", "VISIT"))
+
+demo_test_real <- left_join(m1, demo_test, by = c("SUBJ", "VISIT"))
+demo_test_real$X <- NULL
+
+
+
+
+
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+
+#merging data 
+demo_test_real$X <- NULL
+demo_test_real$types_shared <- NULL
+merged_data$X <- NULL
+
+full_data = rbind(demo_test_real, merged_data)
+
+full_data$SUBJ = as.factor(full_data$SUBJ)
+full_data$SUBJ = as.integer(full_data$SUBJ)
+
+
+#Create fold with unique SUBJ
+library(caret)
+folds=createFolds(full_data$SUBJ, k = 5, list = T, returnTrain = T)
+
+#Create matarix to store results
+cv_empty=matrix(ncol=3, nrow=5)
+cv_empty1= matrix(ncol=3,nrow = 5)
+
+
+#Loop
+#Indexing, reset when using the loop again
+n=1
+
+set.seed(101)
+
+for (k in folds){
+#------ Split into training and test data ------ 
+#Create training dataset, data not in fold k
+data_train=subset(full_data, !(SUBJ %in% k))
+#Create test dataset, data in fold k
+data_test=subset(full_data, SUBJ %in% k)
+  
+#------ train model - apply model to data_train ------
+model2 = lmer(CHI_MLU ~ VISIT * Diagnosis + (1+ VISIT|SUBJ), data_train)
+#Make predictions based on model
+Prediction=predict(model2, type='response')
+#Prints the prediction against the test data
+results_train=ModelMetrics::rmse(data_train$CHI_MLU, Prediction)  
+
+#------ test the model - test model on data_test (last quarter) ------
+#Make predictions based on modeVIS
+Prediction_test=predict(model2, data_test, type='response', allow.new.levels = TRUE)
+#
+results_test=ModelMetrics::rmse(data_test$CHI_MLU, Prediction_test)
+  
+#------ save the performance ------ 
+#Fills out the kth row in cv_empty with iteration and rmse's
+cv_empty[n,]=cbind(n,results_train,results_test)
+
+######################################################
+  
+#------ train second model - apply model to data_train ------
+model3 = lmer(CHI_MLU~VISIT* Diagnosis+I(VISIT^2)*Diagnosis +I(VISIT^3)* Diagnosis +(1+VISIT+I(VISIT^2) +I(VISIT^3)|SUBJ),data_train)
+#Make predictions based on model
+Prediction1=predict(model3, type='response')
+#Prints the prediction against the test data
+results_train1=ModelMetrics::rmse(data_train$CHI_MLU, Prediction1)  
+
+#------ test the model
+Prediction_test1=predict(model3, data_test, type='response', allow.new.levels = TRUE)
+#
+results_test1=ModelMetrics::rmse(data_test$CHI_MLU, Prediction_test1)
+  
+#------ save the performance ------ 
+cv_empty1[n,]=cbind(n,results_train1,results_test1)
+n=n+1
+}
+
+
+
+#------ Make the matrix into a data frame ------ 
+cv_results=data.frame(cv_empty)
+cv_results1=data.frame(cv_empty1)
+#Rename variables 
+cv_results=setnames(cv_results,"X1", "iteration")
+cv_results=setnames(cv_results,"X2", "train")
+cv_results=setnames(cv_results,"X3", "test")
+cv_results1=setnames(cv_results1,"X1", "iteration1")
+cv_results1=setnames(cv_results1,"X2", "train1")
+cv_results1=setnames(cv_results1,"X3", "test1")
+
+results_models <- data.frame(mean(cv_results$train), mean(cv_results$test), mean(cv_results1$train), mean(cv_results1$test))
+
+results_models=setnames(results_models,"mean.cv_results.train.", "train_1st")
+results_models=setnames(results_models,"mean.cv_results.test.", "test_1st")
+results_models=setnames(results_models,"mean.cv_results1.test.", "test_2nd")
+results_models=setnames(results_models,"mean.cv_results1.train.", "train_2nd")
+
+
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
