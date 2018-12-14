@@ -1,0 +1,268 @@
+---
+title: "Assignment 5 - Meta-analysis of pitch in schizophrenia"
+author: "Riccardo Fusaroli"
+date: "3/7/2017"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(pacman)
+
+p_load(metafor)
+
+setwd(getwd())
+
+#------ load data ------
+
+data = read.csv('SR_SCHIZO.csv')
+#Assignment 3 data
+data_3 = read.csv('loop1DF.csv')
+#data_3 = data_3[,1:12] #cut unnecessary variables
+
+
+```
+
+# Building on the shoulders of giants: meta-analysis
+
+## Questions to be answered
+
+1. What is the current evidence for distinctive patterns of pitch mean and pitch sd in schizophrenia? Report how many papers report quantitative estimates, your method to analyze them, the estimated effect size of the difference (mean effect size and standard error for pitch mean, same for pitch sd) and forest plots representing it. 
+
+
+2. Do the results match your own analysis from Assignment 3? If you add your results to the meta-analysis, do the estimated effect sizes change? Report the new estimates and the new forest plots.
+
+
+
+3. Assess the quality of the literature: report and comment on heterogeneity of the studies (tau, I2), on publication bias (funnel plot), and on influential studies.
+
+## Tips on the process to follow:
+
+- Download the data on all published articles analyzing pitch in schizophrenia (on gitlab)
+- Look through the dataset to find out which columns to use, and if there is any additional information written as comments (real world data is always messy!).
+    * Hint: Make sure you read the comments in the columns: `pitch_f0_variability`, `frequency`, `Title`,  `ACOUST_ANA_DESCR`, `DESCRIPTION`, and `COMMENTS`
+- Following the procedure in the slides calculate effect size and standard error of the effect size per each study. N.B. we focus on pitch mean and pitch standard deviation.
+ . first try using lmer (to connect to what you know of mixed effects models)
+ . then use rma() (to get some juicy additional statistics)
+
+- Build a forest plot of the results (forest(model))
+ 
+- Go back to Assignment 3, add your own study to the data table, and re-run meta-analysis. Do the results change?
+
+- Now look at the output of rma() and check tau and I2
+
+```{r}
+#Calculate standardized effect size for mean and sd
+escalc_mean = escalc('SMD', n1i=SAMPLE_SIZE_SZ, n2i=SAMPLE_SIZE_HC, m1i= PITCH_F0_SZ_M, m2i= PITCH_F0_HC_M, sd1i=PITCH_F0_SZ_SD, sd2i=PITCH_F0_HC_SD, data = data)
+
+escalc_sd = escalc('SMD', n1i=SAMPLE_SIZE_SZ, n2i=SAMPLE_SIZE_HC, m1i= PITCH_F0SD_SZ_M, m2i= PITCH_F0SD_HC_M, sd1i=PITCH_F0SD_SZ_SD, sd2i=PITCH_F0SD_HC_SD, data = data)
+#Make models
+
+#Make models
+m_mean = rma(yi,vi, data= escalc_mean, slab = Article)
+m_sd = rma(yi,vi, data= escalc_sd, slab = Article)
+
+#Make forest plot
+forest(m_mean)
+forest(m_sd)
+
+#Make summary of models
+summary(m_mean)
+summary(m_sd)
+
+
+```
+#Answer:
+- Overall 19 papers report quantitative estimates for mean and SD
+- We calculated effect size and SE for each study, using rma we showcase them in a forest plot 
+
+- the statistics related to heterogeneity -> Twe want the I2 to be less than 50%. Anything higher than that and the papers could be inconsistent due to some reason other than chance. In the first analysis teh I2 is 52%, however, in the second it drops down to 43%
+- If the individual study crosses the vertical line, it means the null value lies within the 95% confidence interval. This implies the study result is in fact the null value and therefore the study did not observe a statistically significant difference between the treatment and control groups.
+
+#Forest_mean
+- different studies have different effect sizes, at the bottom we can see overall effect which is 0.24 - a small effect size and p value is not significant and intervals are overlapping so we can not really say anything 
+
+#summary_mean
+- The overall estimated difference (Cohen's d) in pitch variability between the ASD and the comparison groups was 0.24, SE= 0.1810 , p= 0.0787
+
+#forest_sd
+ - different studies have different effect sizes, at the bottom we can see overall effect which is -0.23 - a small effect size and p value is significant but intervals are overlapping so we can not really say anything 
+
+#summary_sd
+- The overall estimated difference (Cohen's d) in pitch variability between the ASD and the comparison groups was  -0.2286 , SE=  0.3140 , p < .0001
+
+
+
+##2. Do the results match your own analysis from Assignment 3? If you add your results to the meta-analysis, do the estimated effect sizes change? Report the new estimates and the new forest plots.
+
+- Following the procedure in the slides calculate effect size and standard error of the effect size per each study. N.B. we focus on pitch mean and pitch standard deviation.
+ . first try using lmer (to connect to what you know of mixed effects models)
+ . then use rma() (to get some juicy additional statistics)
+
+- Build a forest plot of the results (forest(model))
+
+____________________________________________________________
+ 
+- Go back to Assignment 3, add your own study to the data table, and re-run meta-analysis. Do the results change?
+
+- Now look at the output of rma() and check tau and I2
+
+
+
+```{R}
+library(lmerTest)
+p_load(tribble)
+
+
+# model <- lmer(mean ~ Diagnosis +(1|Study), data = data_3)
+# 
+# preds = distinct(data_3, Diagnosis, Study)
+# #as.vector(preds, mode = "any")
+# #as.vector(preds$pred, mode = "any")
+# 
+# preds$pred = predict(model, newdata = preds)
+# 
+# study = data_3$Study
+# print(study)
+# 
+# data.frame(t(preds))
+# preds
+# 
+# 
+# library('data.table')
+# dat.m <- melt(as.data.table(preds, keep.rownames = "Vars"), id.vars = "Vars")
+
+#------ Make the row containing our study ------
+#Sample size
+SAMPLE_SIZE_HC = length(unique(data_3$ID[data_3$Diagnosis == 0]))
+SAMPLE_SIZE_SZ = length(unique(data_3$ID[data_3$Diagnosis == 1]))
+
+#Mean pitch
+PITCH_F0_HC_M = mean(data_3$mean[data_3$Diagnosis == 0])
+PITCH_F0_SZ_M = mean(data_3$mean[data_3$Diagnosis == 1])
+
+#SD of mean pitch
+PITCH_F0_HC_SD = sd(data_3$mean[data_3$Diagnosis == 0])
+PITCH_F0_SZ_SD = sd(data_3$mean[data_3$Diagnosis == 1])
+
+#SD of pitch
+PITCH_F0SD_HC_M = mean(data_3$sd[data_3$Diagnosis == 0])
+PITCH_F0SD_SZ_M = mean(data_3$sd[data_3$Diagnosis == 1])
+
+#SD of SD of pitch
+PITCH_F0SD_HC_SD = sd(data_3$sd[data_3$Diagnosis == 0])
+PITCH_F0SD_SZ_SD = sd(data_3$sd[data_3$Diagnosis == 1])
+
+#Getting yi and vi
+our_study = escalc('SMD', n1i=SAMPLE_SIZE_SZ, n2i=SAMPLE_SIZE_HC, m1i=PITCH_F0_SZ_M, m2i=PITCH_F0_HC_M, sd1i=PITCH_F0_SZ_SD, sd2i=PITCH_F0_HC_SD, data = data_3)
+
+#make a row to merge with pitch range still need Pitchsd and pitchsdsd for both td and Shcizo (just before yi)
+one_row = c("NA", "NA", "NA", "NA", "NA", "NA", "Our Study", "Riccardo Fusaroli", "2019", "Our Study1", SAMPLE_SIZE_SZ, SAMPLE_SIZE_HC, PITCH_F0_HC_M, PITCH_F0_HC_SD, PITCH_F0_SZ_M, PITCH_F0_SZ_SD, PITCH_F0SD_HC_M, PITCH_F0SD_HC_SD, PITCH_F0SD_SZ_M, PITCH_F0SD_SZ_SD, "NA", our_study$yi[1], our_study$vi[1])
+
+#Make numeric, then make back into factor further below
+#escalc_mean[,1] = as.character(escalc_mean[,1])
+#escalc_sd[,1] = as.character(escalc_sd[,1])
+
+escalc_mean[,7] = as.character(escalc_mean[,7])
+escalc_sd[,7] = as.character(escalc_sd[,7])
+
+escalc_mean[,8] = as.character(escalc_mean[,8])
+escalc_sd[,8] = as.character(escalc_sd[,8])
+
+escalc_mean[,10] = as.character(escalc_mean[,10])
+escalc_sd[,10] = as.character(escalc_sd[,10])
+
+#escalc_mean2 = merge(escalc_mean, one_row, by.x = 2, by.y = 0, all.x = TRUE)
+
+
+#Add the row to PitchRange
+escalc_mean2 = rbind(escalc_mean, one_row)
+escalc_sd2 = rbind(escalc_sd, one_row)
+
+
+escalc_mean2[,10] = as.factor(escalc_mean2[,10])
+escalc_sd2[,10] = as.factor(escalc_sd2[,10])
+
+#make back into factor
+#escalc_mean[,1] = as.factor(escalc_mean[,1])
+#escalc_sd[,1] = as.factor(escalc_sd[,1])
+
+#Make numeric
+escalc_mean2$yi = as.numeric(escalc_mean2$yi)
+escalc_mean2$vi = as.numeric(escalc_mean2$vi)
+escalc_sd2$yi = as.numeric(escalc_sd2$yi)
+escalc_sd2$vi = as.numeric(escalc_sd2$vi)
+
+#------ Do analysis again ------
+m2_mean = rma(yi,vi, data= escalc_mean2, slab = Article)
+m2_sd = rma(yi,vi, data= escalc_sd2, slab = Article)
+forest(m2_mean)
+summary(m2_mean)
+forest(m2_sd)
+summary(m2_sd)
+
+
+
+
+
+
+
+```
+#Answer:
+
+#Forest_mean
+- our data_3 and meta data together -> different studies have different effect sizes,  overall effect which is 0.24 - a small effect size and p value is not significant and intervals are overlapping so we can not really say anything 
+
+#Summary_mean
+- The overall estimated difference (Cohen's d) in pitch variability between the ASD and the comparison groups was 0.21, SE= 0.1362, p=0.1348
+
+#Forest_sd
+- different studies have different effect sizes,  we can see overall effect which is -0.20 - a small effect size and p value is significant but intervals are overlapping so we can not really say anything 
+
+#Summary_sd
+- The overall estimated difference (Cohen's d) in pitch variability between the ASD and the comparison groups was -0.20, SE= 0.4834, p < 0.0001
+
+
+##3. Assess the quality of the literature: report and comment on heterogeneity of the studies (tau, I2), on publication bias (funnel plot), and on influential studies.
+
+
+
+```{r}
+
+# assesing the quality of the litterature (tau and I2)
+inf = influence(m2_mean)
+print(inf)
+plot(inf)
+
+
+inf2 = influence(m2_sd)
+print(inf2)
+plot(inf2)
+#in the plot we can see one heavy outlier study, it has also strong influence on the results and affects heterogenity 
+
+ # funnel plot
+funnel(m2_mean)
+regtest(m2_mean)
+ranktest(m2_mean)
+funnel(m2_sd)
+
+
+```
+#Answer:
+- We don´t see any outliers except one study is a bit out of the interval (-2;2)
+- cook.d - only two of studies actually have a s trong influence on the results (cook´s distance)
+- removal of these studies could potentially reduce the amount of heterogenity and increase the precision of the estimated average outcome from the random effects model, however, we have too little number of studies, therefore, it would be better to keep them in our case
+- also, literature says that they can as well reveal patterns of important insight in study characteristics 
+
+#funnel plot
+Each dot represents a single study. The y-axis is the standard error of the effect estimate. Larger studies with higher power are placed towards the top. Lower powered studies are placed towards the bottom.
+
+#regtest
+The P value for Egger's test is above 0.20 in both analysis (with and without our study), so there was no evidence to reject the null hypothesis and it can be concluded that symmetry exists in the funnel plot. Therefore no apparent bias exists in the studies included in the meta-analysis.
+
+#ranktest
+test correlation between sampling variances. A high correlation would indicate that the funnel plot is asymmetric, which may be a result of publication bias. Our correlation for the first analysis corresponds to Kendall's tau = 0.2000, p = 0.82. Regarding second analysis that included our study, the correlation was a little bit higher but still small (Kendall's tau = 0.333, p = 0.94).Therefore, we don't assume publication bias.
