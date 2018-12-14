@@ -1,0 +1,217 @@
+---
+title: "Assignment2_Part1_VoiceInSchizophrenia"
+author: "Katarina Michelova, Maria Mareckova, Nathalie Makova, Alex Pasternakova"
+date: "22.10., 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment 2 - Part 1 - Assessing voice in schizophrenia
+
+Schizophrenia has been associated with "inappropriate" voice, sometimes monotone, sometimes croaky. A few studies indicate that pitch might be an index of schizophrenia. However, an ongoing meta-analysis of the literature (which you will have a go at in the last assignment) indicates that pitch mean and standard deviation are only weak indicators of diagnosis. Can we do better with our new fancy complex skills?
+
+The corpus you are asked to analyse is a set of voice recordings from people with schizophrenia (just after first diagnosis) and 1-1 matched controls (on gender, age, education). Each participant watched 10 videos of triangles moving across the screen and had to describe them (so you have circa 10 recordings per person). We have already extracted the pitch once every 10 milliseconds and you will have to use this data to assess differences in the voice.
+
+Can you characterize voice in schizophrenia as acoustically different? Report the methods you used to answer this question and the results from the analyses. Add a couple of lines trying to interpret the results (make sense of the difference). E.g. People with schizophrenia tend to have high-pitched voice, and present bigger swings in their prosody than controls. Add a couple of lines describing limitations of the data/analyses if any is relevant.
+
+
+N.B. There are looots of files to be dealt with. Maybe too many for your computer, depending on how you load the files. This is a challenge for you. Some (complementary) possible strategies:
+- You can select a subset of files only (and you have to justify your choice).
+- You can learn how to use the apply() or map() functions.
+- You can coordinate with classmates.
+
+Hint: There is some information in the filenames that you might  need.
+Hint: It might be a good idea to first create a function which loads and parses one file, and then loop through the list of files to read them all. For example
+
+```{r include=FALSE}
+
+
+library(readr)
+
+library(stringr)
+library(lmerTest)
+setwd("~/newproject/cogsci-methods-3-assignments-master/Assignment3_VoiceSchizo")
+```
+
+
+
+1. In the course of this assignment you have to first select one datafile and figure out how to:
+
+- Extract "standard" descriptors of pitch: Mean, standard deviation, range
+- Extract less "standard" descriptors of pitch you can think of (e.g. median, iqr, mean absoluted deviation, coefficient of variation)
+
+```{r}
+
+DemoData = read_delim("DemoData.txt", "\t", escape_double = FALSE, trim_ws = TRUE)
+pitch = read.table("Pitch/Study1D0S101T2_f0.txt", sep = "\t", header = TRUE)
+
+mean = mean(pitch$f0)
+sd = sd(pitch$f0)
+range = range(pitch$f0)
+median = median(pitch$f0)
+IQR = IQR(pitch$f0)
+mad = mad(pitch$f0)
+
+
+```
+
+
+
+2. Second you will have to turn the code into a function and loop through all the files (or even better use apply/sapply/lapply)
+- Remember to extract the relevant information from the file names (Participant, Diagnosis, Trial, Study)
+
+```{r}
+
+Pitch = list.files("Pitch", pattern = "*.txt")
+
+loop1DF = data.frame()
+df_result = data.frame()
+results = NULL
+
+mean = NULL
+sd = NULL
+range = NULL
+median =NULL
+IQR = NULL
+mad = NULL
+
+for (i in Pitch) {
+  # file = list.files(wd) #paste("Pitch/", files, sep = '')
+  
+  #------ Read file ------
+  #Paste pitch to get full path to file
+  dest = paste("Pitch/", i , sep = '')
+  #Read file
+  x = read.table(dest, sep = "\t", header = TRUE)
+  
+  #------ Extract info from filename ------
+  extract = str_extract_all(i, "\\d+", simplify = TRUE)
+  Study = extract[1]
+  Diagnosis = extract[2]
+  ID = extract[3]
+  trial = extract[4]
+  
+  #------ Descriptive stats ------
+  mean = mean(x$f0, na.rm = TRUE)
+  sd = sd(x$f0, na.rm = TRUE)
+  range = range(x$f0, na.rm = TRUE)
+  rangeL = range[1]
+  #Make relevant information into a one row data frame
+  rangeU = range[2]
+  median = median(x$f0, na.rm = TRUE)
+  IQR = IQR(x$f0, na.rm = TRUE) #Interquartile range
+  mad = mad(x$f0, na.rm = TRUE) #Median absolute deviation
+  
+  #------ Make dataframe ------  
+  df_result = data.frame(ID, 
+                             Study, 
+                             trial, 
+                             Diagnosis, 
+                             mean, 
+                             sd, 
+                             rangeL,
+                             rangeU,
+                             median, 
+                             IQR, 
+                             mad
+                             )
+  #Bind the above row to the actual dataset for loop 1
+  loop1DF = rbind(loop1DF, df_result)
+}
+
+
+
+write_csv(loop1DF, path =  "loop1DF.csv")
+data_final <- read.csv("loop1DF.csv")
+
+
+
+```
+
+
+3. Make one model per acoustic feature and test whether you can observe significant difference due to Diagnosis. Tip: Which other fixed factors should you control for (that is, include in the model)? Which random ones?
+- Bonus points: cross-validate the model and report the betas and standard errors from all rounds to get an idea of how robust the estimates are. 
+3a. Is study a significant predictor in these models? What should you infer from this? Does study interact with diagnosis? What should you infer from this?
+
+```{r}
+#Rename levels in diagnosis in demo to match the other two data frames
+DemoData$Diagnosis = plyr::mapvalues(DemoData$Diagnosis, c("Control", "Schizophrenia"),c("0", "1"))
+#Gender as factor
+DemoData$Gender = as.factor(DemoData$Gender) 
+#Merge
+data_final <- dplyr::rename(data_final, Subject = ID)
+data = merge(DemoData,data_final, by = c("Subject", "Diagnosis","Study"))
+
+data$rangediff <- data$rangeU - data$rangeL #we calculated the difference between the highest and lowest pitch  
+
+model <- lmer(mean ~ Diagnosis * Gender + Age  + (1 + trial |Subject), data, REML = FALSE)
+summary(model) #diagnosis by itself is not interested for us because it doesnt change. Gender by itself is also not changable, now we want to see how gender effects diagnosis. Difference in a pitch between men and women
+#sign- diagnosis, gender and interaction - 0.03
+
+#add age to the data with interactions and see the difference 
+
+model1 <- lmer(median ~ Diagnosis * Gender + Age +(1 + trial|Subject), data, REML = FALSE)
+summary(model1)#sign - gender, diagnosis
+
+model2 <- lmer(IQR ~ Diagnosis * Gender + Age+ (1 + trial|Subject), data, REML = FALSE)
+summary(model2)#gender
+
+
+model3 <- lmer(rangediff ~ Diagnosis * Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model3)#gender
+
+
+model4 <- lmer(mad ~ Diagnosis * Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model4)#sign - gender and diagnosis
+
+#3a. Is study a significant predictor in these models? What should you infer from this? Does study interact with diagnosis? What should you infer from this?
+model5 <- lmer(rangediff ~ Study + Diagnosis * Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model5)#study is significant only in range difference 0.047
+
+model6 <- lmer(rangediff ~ Study * Diagnosis + Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model6)#interaction study and diagnosis significant
+
+model7 <- lmer(mean ~ Study * Diagnosis + Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model7)#interaction,study, diagnosis, gender
+
+model8 <- lmer(median ~ Study * Diagnosis + Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model8)#interaction, gender, diagnosis
+
+model9 <- lmer(IQR ~ Study * Diagnosis + Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model9)#gender significant
+
+model10 <- lmer(mad ~ Study * Diagnosis + Gender + Age + (1 + trial|Subject), data, REML = FALSE)
+summary(model10)#gender m and diagnosis
+
+
+```
+
+
+
+4. Bonus Question: Compare effect size of diagnosis across the different measures. Which measure seems most sensitive?
+- Tip: to compare across measures you need to put all of them on the same scale, that is, you need to "standardize" them (z-score)
+
+
+
+
+5. Bonus question. In the Clinical Info file you have additional information about the participants. Which additional parameters (e.g. age, gender) should we control for? Report the effects.
+
+6. Write a paragraph reporting methods and results
+Initially, in the first task we have extracted standard descriptors such as mean, standard deviation, range. As a less standard descriptors we have extracted median, iqr and mad.
+
+In the second task, firstly we have created a list from all the pitch files, then we paste pitch to get full path to file. We also extracted important infromation such as study, diagnosis, trial and ID. We again extracted infromation such as mean, range and standard deviation and made relevant infromation into one row such as loweest range/ highest range, median , IQR and mad. Then we have created data frame and bind the columns with infromation we wanted to use to the actual data set and have created csv file from it.
+
+Concerning 3rd task, we have started with renaming levels in diagnosis in demo to match the other two data frames and continued with adjustment in order to make a model. We decided to use diagnosis and gender interaction as a predictor because diagnosis by itself is not interested for us because it doesnt change. Gender by itself is also not changable, now we want to see how gender effects diagnosis by means of the difference in a pitch between men and women. We decided to choose an age as a fixed effect since there can be different between young men voice and gown up adult voice. As a slope we used trial since it changes our information on both y and x axis and Subject was used as an intercept. With this model we have tried to predict our outcome subsequently- mean, median, IQR, rangediff (difference between lowest and highest pitch) and mad. We found that the best model was concerning mean - interaction was significant and also diagnosis and gender separately. Testing median and mad we found gender and diagnosis to be significant. Testing IQR  and range difference only gender was significant. 
+
+3a. Testing Study as a significant predictor turned out only while using range difference as an outcome. 
+
+Interaction between study and diagnosis was proven significant predicting range difference, mean and median. We can infer that diagnosis changes over time due to the fact that study changes
+
+[Next assignment: can we use these measures to build a tool that diagnoses people from voice only?]
+
+## N.B. Remember to save the acoustic features of voice in a separate file, so to be able to load them next time
