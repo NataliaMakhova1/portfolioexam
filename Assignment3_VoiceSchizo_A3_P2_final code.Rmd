@@ -1,0 +1,392 @@
+---
+title: "Assignment 3 - Part 2 - Diagnosing Schizophrenia from Voice"
+author: "Maria Mareckova, Katarana Michelova, Alex Pasternakova, Natalie Makhova"
+date: "October 17, 2017"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(readr)
+library(crqa)
+library(stringr)
+library(lmerTest)
+library(ggplot2)
+library(boot)
+library(caret)
+library(dplyr)
+# install.packages("pROC")
+library(pROC)
+#install.packages("scales")
+library(scales)
+library(ModelMetrics)
+library(data.table)
+library(Metrics)
+
+```
+
+## Assignment 3 - Diagnosing schizophrenia from voice
+
+In the previous part of the assignment you generated a bunch of "features", that is, of quantitative descriptors of voice in schizophrenia, focusing on pitch.
+In the course of this assignment we will use them to try to automatically diagnose schizophrenia from voice only, that is, relying on the set of features you produced last time, we will try to produce an automated classifier.
+
+### Question 1: Can you diagnose schizophrenia from pitch range only? If so, how well?
+
+Build a logistic regression to see whether you can diagnose schizophrenia from pitch range only.
+
+```{r }
+data <- read.csv("data.csv")
+
+data$Diagnosis <- as.factor(data$Diagnosis)
+levels(data$Diagnosis)[levels(data$Diagnosis)=="1"] <- "S"
+levels(data$Diagnosis)[levels(data$Diagnosis)=="0"] <- "C"
+
+data$rangediffscaled <- rescale(data$rangediff, to = c(0,1))
+
+
+ggplot(data, aes(rangediff, Diagnosis), color= Subject) +
+  geom_point()  + stat_smooth(method="glm", family="binomial")
+
+model_range <- glmer(Diagnosis ~ rangediffscaled + (1 +trial | Subject), data, family = "binomial")
+summary(model_range)
+
+
+newdat <- data.frame(rangediff=seq(min(data$rangediff), max(data$rangediff),len=1323))
+newdat$Diagnosis = predict(model_range, type="response", newdata = newdat)
+
+#newdat <- data.frame(rangediffscaled=seq(min(data$rangediffscaled), max(data$rangediffscaled),len=1323))
+#newdat$trial <-data$trial
+#newdat$Subject <- data$Subject
+
+#newdat$Diagnosis = predict(model_range, type="response", newdata = newdat)
+
+
+
+
+
+
+inv.logit(0.2699) #57%
+inv.logit(0.2699 - 0.0019) #56
+inv.logit(0.2699 - (0.0019*2))
+
+exp(0.2699) #there is 1.3 more likely to be schizofrenic
+exp(0.2699 - 0.0019)
+exp(0.2699 - (0.0019*2))
+
+
+```
+
+Calculate the different performance measures (accuracy, sensitivity, specificity, PPV, NPV, ROC curve) on a logistic regression using the full dataset. Don't forget the random effects!
+
+```{r}
+
+# making confusion matrix
+data$PredictionsPerc= inv.logit(predict(model_range))
+data$Predictions[data$PredictionsPerc>0.5]="S"
+data$Predictions[data$PredictionsPerc<=0.5]="C"
+data$Predictions <- as.factor(data$Predictions)
+
+
+caret::confusionMatrix(data = data$Predictions, reference = data$Diagnosis, positive = "C")
+
+
+
+# confusion matrix
+#             Reference
+# Prediction   C   S
+         # C 327 175
+         # S 329 492
+
+#accuracy 
+
+accuracy = (327+492)/(327+175+329+492)
+accuracy = 0.6190476
+# accuracy is a bit bigger than 50% that means that just by saying schisophrenic we would be correct
+
+"  Sensitivity : 0.4985          
+  Specificity : 0.7376          
+   Pos Pred Value : 0.6514          
+   Neg Pred Value : 0.5993 "
+
+
+# making ROC curve
+
+
+rocCurve <- roc(response = data$Diagnosis,predictor = data$PredictionsPerc)
+data$DiagnosisN <- as.numeric(data$Diagnosis)-1
+auc(actual = data$DiagnosisN, predicted =  data$PredictionsPerc) 
+ci (rocCurve)
+plot(rocCurve, legacy.axes = TRUE) 
+
+
+
+
+
+```
+
+
+Then cross-validate the logistic regression and re-calculate performance on the testing folds. N.B. The cross-validation functions you already have should be tweaked: you need to calculate these new performance measures.
+
+N.B. the predict() function generates log odds (the full scale between minus and plus infinity). Log odds > 0 indicates a choice of 1, below a choice of 0.
+N.B. you need to decide whether calculate performance on each single test fold or save all the prediction for test folds in one datase, so to calculate overall performance.
+N.B. Now you have two levels of structure: subject and study. Should this impact your cross-validation?
+
+```{r}
+
+
+
+#Create fold with unique SUBJ
+folds=createFolds(unique(data$Subject), k = 4)
+
+#Create matarix to store results
+data$SubjectN=as.numeric(as.factor(data$Subject))
+#--------Create null list for results --------
+results = data.frame()
+
+
+
+#Loop
+#Indexing, reset when using the loop again
+n=1
+
+for (k in folds){
+#------ Split into training and test data ------ 
+#Create training dataset, data not in fold k
+data_train=subset(data,!(SubjectN %in% k))
+#Create test dataset, data in fold k
+data_test=subset(data, SubjectN %in% k)
+
+  
+#------ train model - apply model to data_train ------
+
+model_range <- glmer(Diagnosis ~ rangediffscaled + (1+ trial|SubjectN), data_train, family = "binomial")
+
+ predict_train = predict(model_range, data_train, type = 'response') 
+  predict_train1 = factor(ifelse(predict_train > 0.5, 1, 0), labels = c("C", "S"))
+  
+  cm_train = caret::confusionMatrix(predict_train1, data_train$Diagnosis)
+  
+  data_train$PredictionsPerc= inv.logit(predict(model_range))
+  
+  roc_train = roc(response = data_train$Diagnosis, predictor = data_train$PredictionsPerc)
+  auc_train = auc(as.numeric(data_train$Diagnosis)-1, data_train$PredictionsPerc)
+  
+  #------ test the model - test model on data_test (last quarter) ------
+  #Make predictions based on modeVIS
+  # model_range <- glmer(Diagnosis ~ rangediffscaled + (1+ trial|SubjectN), data_train, family = "binomial")
+  
+  predict_test=predict(model_range, newdata=data_test, type = 'response', allow.new.levels = TRUE)
+  predict_test1 = factor(ifelse(as.numeric(predict_test) > 0.5, 1, 0), labels = c("C", "S"))
+#   data_test$PredictionsPerc= inv.logit(predict(model_range))
+#  predict_test1$Predictions[predict_test1$PredictionsPerc>0.5]="S"
+# predict_test1$Predictions[predict_test1$PredictionsPerc<=0.5]="C"
+
+  cm_test = caret::confusionMatrix(data = predict_test1, reference = data_test$Diagnosis)
+  
+data_test$PredictionsPerc= inv.logit(predict(model_range, data_test, allow.new.levels = TRUE))
+  
+  roc_test = roc(response = data_test$Diagnosis, predictor = data_test$PredictionsPerc)
+  auc_test = auc(as.numeric(data_test$Diagnosis)-1, data_test$PredictionsPerc)
+  
+  #------ save the performance ------ 
+  
+  
+  one_row = data.frame(acc_train = cm_train$overall[1], 
+                       acc_test = cm_test$overall[1], 
+                       sens_train = cm_train$byClass[1], 
+                       sens_test = cm_test$byClass[1], 
+                       spec_train = cm_train$byClass[2], 
+                       spec_test = cm_test$byClass[2], 
+                       auc_train = auc_train, 
+                       auc_test = auc_test, 
+                       npv_train = cm_train$byClass[3], 
+                       npv_test = cm_test$byClass[3], 
+                       ppv_train = cm_train$byClass[4], 
+                       ppv_test = cm_test$byClass[4]
+                       )
+  
+  
+  results = rbind(results, one_row)
+    }
+
+
+
+
+
+```
+
+### Question 2 - Which single acoustic predictor is the best predictor of diagnosis?
+```{r}
+
+
+
+model_mean <- glmer(Diagnosis~ meanscaled + (1+trial|Subject), data, family = "binomial")
+summary(model_mean)
+inv.logit(-1.616637)
+
+
+data$PredictionsPerc2= inv.logit(predict(model_mean))
+data$Predictions2[data$PredictionsPerc2>0.5]="S"
+data$Predictions2[data$PredictionsPerc2<=0.5]="C"
+data$Predictions2 <- as.factor(data$Predictions2)
+
+
+caret::confusionMatrix(data = data$Predictions2, reference = data$Diagnosis, positive = "C")
+#  Balanced Accuracy : 0.6666   
+# p = 4.29e-05 ***, 16.6% probability of being schisophrenic when range is 0
+
+model_sd <- glmer(Diagnosis~ sd + (1+trial|Subject), data, family = "binomial")
+summary(model_sd)
+
+
+data$PredictionsPerc3= inv.logit(predict(model_sd))
+data$Predictions3[data$PredictionsPerc3>0.5]="S"
+data$Predictions3[data$PredictionsPerc3<=0.5]="C"
+data$Predictions3 <- as.factor(data$Predictions3)
+
+
+caret::confusionMatrix(data = data$Predictions3, reference = data$Diagnosis, positive = "C")
+# Balanced Accuracy : 0.6340  
+
+# p = 0.06, #53%
+
+model_median <- glmer(Diagnosis~ median + (1+trial|Subject), data, family = "binomial")
+summary(model_median)
+
+data$PredictionsPerc4= inv.logit(predict(model_median))
+data$Predictions4[data$PredictionsPerc4>0.5]="S"
+data$Predictions4[data$PredictionsPerc4<=0.5]="C"
+data$Predictions4 <- as.factor(data$Predictions4)
+
+
+caret::confusionMatrix(data = data$Predictions4, reference = data$Diagnosis, positive = "C")
+ #Balanced Accuracy : 0.6459
+
+
+model_IQR <- glmer(Diagnosis~ IQR + (1+trial|Subject), data, family = "binomial")
+summary(model_IQR)
+
+
+data$PredictionsPerc5= inv.logit(predict(model_IQR))
+data$Predictions5[data$PredictionsPerc5>0.5]="S"
+data$Predictions5[data$PredictionsPerc5<=0.5]="C"
+data$Predictions5 <- as.factor(data$Predictions5)
+
+
+caret::confusionMatrix(data = data$Predictions5, reference = data$Diagnosis, positive = "C")
+
+#Balanced Accuracy : 0.6329 
+
+# p =  0.026 *, 53.14%
+
+model_mad <- glmer(Diagnosis~ mad + (1+trial|Subject), data, family = "binomial")
+summary(model_mad)
+
+data$PredictionsPerc6= inv.logit(predict(model_mad))
+data$Predictions6[data$PredictionsPerc6>0.5]="S"
+data$Predictions6[data$PredictionsPerc6<=0.5]="C"
+data$Predictions6 <- as.factor(data$Predictions6)
+
+
+caret::confusionMatrix(data = data$Predictions6, reference = data$Diagnosis, positive = "C")
+# Balanced Accuracy : 0.6343
+#p  = 1.11e-08 ***
+
+
+
+```
+
+
+### Question 3 - Which combination of acoustic predictors is best for diagnosing schizophrenia?
+
+Now it's time to go wild! Use all (voice-related) variables and interactions you can think of. Compare models and select the best performing model you can find.
+
+Remember:
+- Out-of-sample error crucial to build the best model!
+- After choosing the model, send Malte and Riccardo the code of your model
+
+```{r}
+
+data$meanscaled <- rescale(data$mean, to = c(0,1))
+data$sdscaled <- rescale(data$sd, to = c(0,1))
+data$medianscaled <- rescale(data$median, to = c(0,1))
+data$IQRscaled <- rescale(data$IQR, to = c(0,1))
+data$madscaled <- rescale(data$mad, to = c(0,1))
+
+datacor <- select(data, mean, sd, mad, rangediff, median)
+cor(as.matrix(datacor), use = "complete.obs")
+
+
+
+model_all1 <- glmer(Diagnosis ~ rangediffscaled + meanscaled + madscaled + (1| Subject), data, family = "binomial")
+summary(model_all1)
+
+data$PredictionsPerc9= inv.logit(predict(model_all1))
+data$Predictions9[data$PredictionsPerc9>0.5]="S"
+data$Predictions9[data$PredictionsPerc9<=0.5]="C"
+data$Predictions9 <- as.factor(data$Predictions9)
+
+
+caret::confusionMatrix(data = data$Predictions9, reference = data$Diagnosis, positive = "C")
+#Balanced Accuracy : 0.7047 , AIC = 1765,2
+
+
+model_all2 <- glmer(Diagnosis ~ meanscaled*rangediffscaled + madscaled + (1| Subject), data, family = "binomial")
+summary(model_all2)
+
+data$PredictionsPerc8= inv.logit(predict(model_all2))
+data$Predictions8[data$PredictionsPerc8>0.5]="S"
+data$Predictions8[data$PredictionsPerc8<=0.5]="C"
+data$Predictions8 <- as.factor(data$Predictions8)
+
+
+caret::confusionMatrix(data = data$Predictions8, reference = data$Diagnosis, positive = "C")
+# Balanced Accuracy : 0.6879 , AIC = 1745.6
+
+
+model_all2.1 <- glmer(Diagnosis ~ meanscaled+rangediffscaled *madscaled + (1| Subject), data, family = "binomial")
+summary(model_all2.1)
+
+data$PredictionsPerc8.1= inv.logit(predict(model_all2.1))
+data$Predictions8.1[data$PredictionsPerc8>0.5]="S"
+data$Predictions8.1[data$PredictionsPerc8<=0.5]="C"
+data$Predictions8.1 <- as.factor(data$Predictions8.1)
+
+
+caret::confusionMatrix(data = data$Predictions8.1, reference = data$Diagnosis, positive = "C")
+
+ #Balanced Accuracy : 0.6879, AIC = 1747,4
+
+
+
+model_all3 <- glmer(Diagnosis ~ rangediffscaled * meanscaled * madscaled + (1| Subject), data, family = "binomial")
+summary(model_all3)
+
+data$PredictionsPerc10= inv.logit(predict(model_all3))
+data$Predictions10[data$PredictionsPerc10>0.5]="S"
+data$Predictions10[data$PredictionsPerc10<=0.5]="C"
+data$Predictions10 <- as.factor(data$Predictions10)
+
+
+caret::confusionMatrix(data = data$Predictions10, reference = data$Diagnosis, positive = "C")
+#Balanced Accuracy : 0.6974, AIC = 1742,8 
+
+
+
+
+
+```
+### Question 4: Properly report the results
+
+METHODS SECTION: how did you analyse the data? That is, how did you extract the data, designed the models and compared their performance?
+
+RESULTS SECTION: can you diagnose schizophrenia based on voice? which features are used? Comment on the difference between the different performance measures.
+
+### Bonus question 5
+
+You have some additional bonus data involving speech rate, pauses, etc. Include them in your analysis. Do they improve classification?
+
+### Bonus question 6
+
+Logistic regression is only one of many classification algorithms. Try using others and compare performance. Some examples: Discriminant Function, Random Forest, Support Vector Machine, etc. The package caret provides them.
