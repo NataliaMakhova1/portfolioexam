@@ -1,0 +1,175 @@
+---
+title: "Assignment 1 - Language Development in ASD - part 4"
+author: "Maria, Natalia, Katarina, Alexandra "
+date: "August 10, 2017"
+output:
+  word_document: default
+---
+
+
+## Welcome to the fourth exciting part of the Language Development in ASD exercise
+
+In this exercise we will assess how many participants we would need to adequately replicate our findings (ensuring our sample size is adequate, our alpha at 0.05 and our beta at 0.8).
+
+### Exercise 1
+
+How much power does your study have (if your model estimates are quite right)?
+- [GitHub]Load your dataset, fit your favorite model, assess power for your main effects and interactions of interest.
+- Report the power analysis and comment on what you can (or cannot) use its estimates for.
+```{r setup, include=FALSE}
+
+full_data <- read.csv("full_data.csv")
+full_data$X <- NULL
+train_data <- read.csv("demo_test_real.csv")
+#train_data$SUBJ <- as.factor(train_data$SUBJ )
+library(simr)
+library(lmerTest)
+str(full_data)
+#full_data$SUBJ <- as.integer(full_data$SUBJ)
+library(tidyverse)
+library(ggplot2)
+
+model <- lmer(CHI_MLU~VISIT* Diagnosis+ I(VISIT^2)*Diagnosis +I(VISIT^3)* Diagnosis +(1|SUBJ) ,full_data, REML = F)#+ I(VISIT^2)*Diagnosis +I(VISIT^3)* Diagnosis
+summary(model)
+
+#plotting model
+
+plot(model, type="l")
+#creates all the combination of we can give our predictor function
+predict_data<- expand.grid(Diagnosis = factor(c("A", "B")), VISIT = 1:6) %>% 
+  mutate(CHI_MLU = predict(model, ., re.form = NA))
+predict_data
+
+ggplot(full_data, aes(x = VISIT, y = CHI_MLU, colour = Diagnosis)) + 
+  geom_jitter(width = .3) +
+  geom_line(data = predict_data)
+
+#if you we have a high learning rate, you might have also be au autist, but if you have lower learning you are definitly autist
+
+powerV = powerSim(model ,simr::fixed("VISIT", method = "t"),nsim=20)
+powerV 
+
+powerD = powerSim(model ,simr::fixed("DiagnosisB", method = "t"),nsim=200)
+powerD
+
+powerI = powerSim(model, test = fixed("VISIT:DiagnosisB", method = "t"),nsim=200)
+powerI 
+
+powerV2 = powerSim(model, test = fixed("I(VISIT^2)", method = "t"),nsim=200)
+powerV2 
+
+powerV3 = powerSim(model, test = fixed("I(VISIT^3)", method = "t"),nsim=200)
+powerV3 
+
+powerI2 = powerSim(model, test = fixed("DiagnosisB:I(VISIT^2)", method = "t"),nsim=200)
+powerI2 
+
+powerI3 = powerSim(model, test = fixed("DiagnosisB:I(VISIT^3)", method = "t"),nsim=200)
+powerI3 
+
+
+```
+
+#Answer: 
+We used our best model from previous analyses (CHI_MLU~VISIT* Diagnosis+ I(VISIT^2)*Diagnosis +I(VISIT^3)* Diagnosis +(1|SUBJ). We calculated power for our main effects and important interactions. 
+- power of effect "Visit" is 70%, effect size is 0.78
+- power for the effect "Diagnosis" is 31%, effect size is 0.49
+- power for the effect "VISIT:DiagnosisB" is 48%, effect size is -0.81
+- power for the effect "DiagnosisB:I(VISIT^2)" 86.5%, effect size is is 0.40
+- power for the effect "DiagnosisB:I(VISIT^3)" 87.5%,effect size is is -0.041
+
+- what to use them for? 
+An effect size measures the actual strength of the result we got. It is what we found in the actual sample we have.
+
+### Exercise 2
+
+How would you perform a more conservative power analysis?
+- Identify and justify a minimum effect size for each of your relevant effects
+- [GitHub] take the model from exercise 1 and replace the effects with the minimum effect size that you'd accept. 
+- [GitHub] assess the power curve by Child.ID, identifying an ideal number of participants to estimate each effect - how we can identify additional participants?
+- [GitHub] if your power estimates do not reach an acceptable threshold simulate adreshold?
+- Report the power analysis and comment on what you can (or cannot) use its estimates for.
+
+```{r, include=FALSE}
+
+fixef(model)["VISIT"] <- 0.2
+fixef(model)["DiagnosisB"] <- 0.2
+fixef(model)["VISIT:DiagnosisB"] <- 0.1
+fixef(model)["I(VISIT^2)"] <- 0.01
+fixef(model)["I(VISIT^3)"] <- 0.001
+fixef(model)["DiagnosisB:I(VISIT^2)"] <- 0.01
+fixef(model)["DiagnosisB:I(VISIT^3)"] <- 0.001
+
+
+powerCurveV = powerCurve(model,simr::fixed("VISIT", method = "t"), along =  "SUBJ", nsim=200)
+ plot(powerCurveV)
+
+powerCurveD = powerCurve(model,fixed("DiagnosisB", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveD)
+
+powerCurveI = powerCurve(model, fixed("DiagnosisB:VISIT", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveI)
+
+powerCurveV2 = powerCurve(model, fixed("I(VISIT^2)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveI)
+
+powerCurveV3 = powerCurve(model, fixed("I(VISIT^3)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveI)
+
+powerCurveI2 = powerCurve(model, fixed("DiagnosisB:I(VISIT^2)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveI2)
+
+powerCurveI3 = powerCurve(model, simr::fixed("DiagnosisB:I(VISIT^3)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurveI3)
+powerCurveI3
+
+model_ext_class <- extend(model, along="SUBJ", n=1500)
+
+nrow(getData(model_ext_class))
+nrow(getData(model))
+
+model_ext_class
+
+powerCurve_extV = powerCurve(model_ext_class,fixed("VISIT", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurve_extV)
+powerCurve_extV
+
+powerCurve_extI2 = powerCurve(model_ext_class, fixed("DiagnosisB:I(VISIT^2)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurve_extI2)
+powerCurve_extI2
+
+powerCurve_extI3 = powerCurve(model_ext_class, fixed("DiagnosisB:I(VISIT^3)", method = "t"),along="SUBJ", nsim=200)
+plot(powerCurve_extI3)
+powerCurve_extI3
+
+
+```
+
+#Answer:
+
+- ?justify minimum effect values?
+
+- We replaced the effects with minimum values and identified the number of participants that we need for them to have power over 80%. 
+Effect "visit" reaches 83% with 1334 participants. 
+Diagnosis came out as non-significant, therefore, there is no reason to add more participants for this effect since it would not be significant anyway.
+Our interaction "DiagnosisB:VISIT" was also not significant.
+Inetraction "DiagnosisB:I(VISIT^2)" reaches 82% power with 1001 participants. 
+The last inetraction "DiagnosisB:I(VISIT^3)" reaches 82.5% with 10 participants. 
+
+- what can we use or cannot use the estimates for? 
+The minimum effect size is the minimum deviation from the null hypothesis that we would accept. Thanks to power analysis we can estimate how many participants are needed for our experiment, when we know the minimum effect size we are looking for or, on the other hand, whether it is worth to even attempt the experiment (eg. It would be lost cause to do an experiment if we needed entire Denmark to participate in order to get good results). In our case we would need much bigger sample size for our effects to have enough power. 
+
+### Exercise 3
+
+Assume you have only the resources to collect 30 kids (15 with ASD and 15 TDs). Identify the power for each relevant effect and discuss whether it's worth to run the study and why
+
+
+#Answer:
+With Visit 30 is enough for the model to have 100% power
+However, diagnosis gives us 0% power with 30 participants therefore we wouldnÂ´t be able to spot the effect of diagnosis
+Based on this fact, it wouldn´t be worth to run the study
+
+
+```
+
+
