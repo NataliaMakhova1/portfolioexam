@@ -1,0 +1,375 @@
+---
+title: "Computational Modeling - Week 3 - Assignment 2 - Part 1"
+author: "Group8"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/natal/Google Drive/study/4 semester/computational modeling")
+
+library(tidyverse)
+#library(devtools)
+#install.packages("rethinking")
+library(rethinking)
+```
+
+## In this assignment we learn how to assess rates from a binomial distribution, using the case of assessing your teachers' knowledge of CogSci
+
+### First part
+
+You want to assess your teachers' knowledge of cognitive science. "These guys are a bunch of drama(turgist) queens, mindless philosophers, chattering communication people and Russian spies. Do they really know CogSci?", you think.
+
+To keep things simple (your teachers should not be faced with too complicated things):
+- You created a pool of equally challenging questions on CogSci
+- Each question can be answered correctly or not (we don't allow partially correct answers, to make our life simpler).
+- Knowledge of CogSci can be measured on a scale from 0 (negative knowledge, all answers wrong) through 0.5 (random chance) to 1 (awesome CogSci superpowers)
+
+This is the data:
+- Riccardo: 3 correct answers out of 6 questions
+- Kristian: 2 correct answers out of 2 questions (then he gets bored)
+- Josh: 160 correct answers out of 198 questions (Josh never gets bored)
+- Mikkel: 66 correct answers out of 132 questions
+
+Questions:
+
+1. What's Riccardo's estimated knowledge of CogSci? Riccardo estimated knowledge of CogSci from plot is 50% and statistical  measures:   #Mean StdDev 5.5% 94.5%
+p  0.5    0.2 0.17  0.83
+What is the probability he knows more than chance (0.5) [try figuring this out. if you can't peek into chapters 3.1 and 3.2 and/or the slides]? 50% is the probability that he knows more than 50%.
+
+- First implement a grid approximation (hint check paragraph 2.4.1!) with a uniform prior, calculate the posterior and plot the results
+- Then implement a quadratic approximation (hint check paragraph 2.4.2!).
+- N.B. for the rest of the exercise just keep using the grid approximation (we'll move to quadratic approximations in two classes)
+
+```{r}
+#from book
+# define grid
+#p_grid <- seq( from=0 , to=1 , length.out=20 )
+# define prior
+#prior <- rep( 1 , 20 )
+# compute likelihood at each value in grid
+#likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+# compute product of likelihood and prior
+#unstd.posterior <- likelihood * prior
+# standardize the posterior, so it sums to 1
+#posterior <- unstd.posterior / sum(unstd.posterior)
+
+#for Riccardo
+densR<- 20
+p_grid <- seq(from=0, to=1, length.out = dens)
+priorR <- rep(1, 20)
+
+likelihoodR <- dbinom( 3 , size=6 , prob=p_grid )
+
+unstd.posteriorR <- likelihoodR * priorR
+
+posteriorR <- unstd.posteriorR / sum(unstd.posteriorR)
+
+plot( p_grid , posteriorR , type="b" ,xlab="probability of Riccardo" , ylab="posterior probability" )
+mtext( "20 points" )
+
+
+#for Kristian 
+densK<- 20
+p_grid <- seq(from=0, to=1, length.out = dens)
+priorK <- rep(1, 20)
+
+likelihoodK <- dbinom( 2 , size=2 , prob=p_grid )
+
+unstd.posteriorK <- likelihoodK * priorK
+
+posteriorK <- unstd.posteriorK / sum(unstd.posteriorK)
+
+plot( p_grid , posteriorK , type="b" ,xlab="probability of Kristian" , ylab="posterior probability" )
+mtext( "20 points" )
+
+#for Josh
+densJ<- 20
+p_grid <- seq(from=0, to=1, length.out = dens)
+priorJ <- rep(1, 20)
+
+likelihoodJ <- dbinom( 160 , size=198 , prob=p_grid )
+
+unstd.posteriorJ <- likelihoodJ * priorJ
+
+posteriorJ <- unstd.posteriorJ / sum(unstd.posteriorJ)
+
+plot( p_grid , posteriorJ , type="b" ,xlab="probability of Josh" , ylab="posterior probability" )
+mtext( "20 points" )
+
+#for Mikkel
+densM<- 20
+p_grid <- seq(from=0, to=1, length.out = dens)
+priorM <- rep(1, 20)
+
+likelihoodM <- dbinom( 66 , size=132 , prob=p_grid )
+
+unstd.posteriorM <- likelihoodM * priorM
+
+posteriorM <- unstd.posteriorM / sum(unstd.posteriorM)
+
+plot( p_grid , posteriorM , type="b" ,xlab="probability of Mikkel" , ylab="posterior probability" )
+mtext( "20 points" )
+# 50% chance that Mikkel wil get it right, whether Riccardo we have a lot of uncertainty about how good he is.
+
+#question2 implementing quadratic smth
+#for Riccardo
+globe.qaR <- map(
+alist(
+w ~ dbinom(6,p) , # binomial likelihood
+p ~ dunif(0,1) # uniform prior
+) ,
+data=list(w=3) )
+# display summary of quadratic approximation
+precis( globe.qaR )
+#   Mean StdDev 5.5% 94.5%
+#p  0.5    0.2 0.17  0.83
+
+#for Kristian - we can't use it for Kristian, because his distribution isn't eqaully distributed across the mean
+globe.qa <- map(
+alist(
+w ~ dbinom(2, p), 
+p ~ dunif(0,1)
+),
+data = list(w=2) )
+
+precis(globe.qa)
+
+#for Josh
+globe.qaJ <- map(
+alist(
+w ~ dbinom(198, p), 
+p ~ dunif(0,1)
+),
+data = list(w=160) )
+
+precis(globe.qaJ)
+#   Mean StdDev 5.5% 94.5%
+#p 0.81   0.03 0.76  0.85
+
+#for Mikkel
+globe.qaM <- map(
+alist(
+w ~ dbinom(132, p), 
+p ~ dunif(0,1)
+),
+data = list(w=66) )
+
+precis(globe.qaM)
+#  Mean StdDev 5.5% 94.5%
+#p  0.5   0.04 0.43  0.57
+
+
+#density - it's not the y axis is meaningful, it's the area, whih the area of the graph. just for now we don't need it.
+#Josh: there is a 80% probability
+#density function is pur plots
+
+```
+
+
+2. Estimate all the teachers' knowledge of CogSci. Who's best? Use grid approximation. Comment on the posteriors of Riccardo and Mikkel.
+done in the first one
+answer: Josh is the best. Riccardo and Mikkel have 50/50 probability. which means that there is 50 % chance that they will get the answers correct.
+2a. Produce plots of the prior, and posterior for each teacher. - at this point we have no prior knowledge of our professors knowledge in CogSci field. But we assume as they are proffessors in university their knowledge is absolute (to necessary extent)
+, therefore, there prior probability is 1, which is 100%.
+```{r}
+dens<- 20
+p_grid <- seq(from=0, to=1, length.out = dens)
+priorR <- rep(1, 20)
+plot( p_grid , priorR , type="b" ,xlab="probability of Riccardo" , ylab="posterior probability" )
+mtext( "20 points" )
+
+```
+
+
+
+3. Change the prior. Given your teachers have all CogSci jobs, you should start with a higher appreciation of their knowledge: the prior is a normal distribution with a mean of 0.8 and a standard deviation of 0.2. Do the results change (and if so how)?
+- Riccardo: we can observe with the increasing the mean till 0.8 that the peak in the Riccardo's curve shifted to a higher value to 0.65 from 0.5 as with the uniform prior.
+- Kristian: we can observe form the plot that the curve has change from exponential groth to partially quadratic curve. we can also observe that the peak shifted to lower value - 0.9. it makes sense because, he had 100% accuracy, so now we increased his expected mean.
+- Josh: the observeble plots don't give us exact difference. we assume that is because his original mean was around 0.8
+- Mikkel: we can observe that plot now has the one peak value aroun 0.55, whether the original plot had 2 peak starting from 0.45 to 0.55 and then both plots drops significantly.
+3a. Produce plots of the prior and posterior for each teacher.
+
+```{r}
+#RICCARDO 
+densR<- 20
+p_grid1 <- seq(from=0, to=1, length.out = densR)
+priorR1 <- dnorm(p_grid1, mean = 0.8, sd = 0.2)
+
+likelihoodR1 <- dbinom( 3 , size=6 , prob=p_grid1 )
+
+unstd.posteriorR1 <- likelihoodR1 * priorR1
+
+posteriorR1 <- unstd.posteriorR1 / sum(unstd.posteriorR1)
+
+plot( p_grid1 , posteriorR1 , type="b" ,xlab="probability of Riccardo" , ylab="posterior probability" )
+mtext( "20 points" )
+
+
+#KRISTIAN
+densK<- 20
+p_grid1 <- seq(from=0, to=1, length.out = densK)
+priorK1 <- dnorm(p_grid1, mean = 0.8, sd = 0.2)
+
+likelihoodK1 <- dbinom( 2 , size=2 , prob=p_grid1 )
+
+unstd.posteriorK1 <- likelihoodK1 * priorK1
+
+posteriorK1 <- unstd.posteriorK1 / sum(unstd.posteriorK1)
+
+plot( p_grid1 , posteriorK1 , type="b" ,xlab="probability of Kristian" , ylab="posterior probability" )
+mtext( "20 points" )
+
+#for Josh
+densJ<- 20
+p_grid1 <- seq(from=0, to=1, length.out = densJ)
+priorJ1 <-dnorm(p_grid1, mean = 0.8, sd = 0.2)
+
+likelihoodJ1 <- dbinom( 160 , size=198 , prob=p_grid1 )
+
+unstd.posteriorJ1 <- likelihoodJ1 * priorJ1
+
+posteriorJ1 <- unstd.posteriorJ1 / sum(unstd.posteriorJ1)
+
+plot( p_grid1 , posteriorJ1 , type="b" ,xlab="probability of Josh" , ylab="posterior probability" )
+mtext( "20 points" )
+
+#for Mikkel
+densM<- 20
+p_grid1 <- seq(from=0, to=1, length.out = densM)
+priorM1 <- dnorm(p_grid1, mean = 0.8, sd = 0.2)
+
+likelihoodM1<- dbinom( 66 , size=132 , prob=p_grid1 )
+
+unstd.posteriorM1 <- likelihoodM1 * priorM1
+
+posteriorM1 <- unstd.posteriorM1 / sum(unstd.posteriorM1)
+
+plot( p_grid1 , posteriorM1 , type="b" ,xlab="probability of Mikkel" , ylab="posterior probability" )
+mtext( "20 points" )
+```
+
+
+
+
+
+4. You go back to your teachers and collect more data (multiply the previous numbers by 100). Calculate their knowledge with both a uniform prior and a normal prior with a mean of 0.8 and a standard deviation of 0.2. Do you still see a difference between the results? Why? we can observe difference in betweeen Mikkel and Riccardo' plots comparing posteriors with changeed unifor and normal priors. why?
+
+```{r, include=FALSE}
+
+name <- c("Riccardo"," Kristian", "Josh"," Mikkel")
+cor_ans <- c(3,2,160,66)
+questions <- c(6,2,198,132)
+df <- data.frame(name, cor_ans, questions)
+
+cor_ans1 <- c(3,2,160,66) *100
+questions1 <- c(6,2,198,132) *100
+df1 <- data.frame(name, cor_ans1, questions1)
+
+
+
+#uniform prior
+i = 1
+for (i in df1$name) {
+  
+  dens = 20
+  grid <- seq(from=0, to=1, length.out = dens)
+prior <- rep(1,dens)
+
+likelihood<- dbinom(df1$cor_ans1[df1$name == i], df1$questions1[df1$name == i], prob = grid)
+
+unstd.posterior <- likelihood * prior
+
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+prob <- data.frame(grid =grid, posterior = posterior, prior = prior, likelihood = likelihood)
+ 
+plot <- plot( grid , posterior , type="b" ,xlab=(paste("probability of", i)) , ylab="posterior probability" )
+
+  print(plot)
+ 
+}
+
+
+
+
+#normal prior 
+i = 1
+for (i in df1$name) {
+  
+  dens = 20
+  grid <- seq(from=0, to=1, length.out = dens)
+prior <-  dnorm(grid, mean = 0.8, sd = 0.2)
+
+likelihood<- dbinom(df1$cor_ans1[df1$name == i], df1$questions1[df1$name == i], prob = grid)
+
+unstd.posterior <- likelihood * prior
+
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+prob1 <- data.frame(grid = grid, posterior = posterior, prior = prior, likelihood = likelihood)
+ 
+plot <- plot( grid , posterior , type="b" ,xlab=(paste("probability of", i)) , ylab="posterior probability" )
+
+  print(plot)
+ 
+}
+
+```
+
+
+5. Imagine you're a skeptic and think your teachers do not know anything about CogSci, given the content of their classes. How would you operationalize that belief? We are changing the mean, because it represents the mean average of knowledge of theachers. We can observe difference in plots of all teachers in a way that their expected knowledge has decreased. should we use knowledge that we gain after 2nd data collection (multiply by 100)?
+
+```{r, include=FALSE}
+
+#maybe decrease the mean to 0.2? 
+
+i = 1
+for (i in df$name) {
+  
+  dens = 20
+  grid <- seq(from=0, to=1, length.out = dens)
+prior <-  dnorm(grid, mean = 0.2, sd = 0.2)
+
+likelihood<- dbinom(df1$cor_ans1[df1$name == i], df1$questions1[df1$name == i], prob = grid)
+
+unstd.posterior <- likelihood * prior
+
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+prob1 <- data.frame(grid = grid, posterior = posterior, prior = prior, likelihood = likelihood)
+ 
+plot <- plot( grid , posterior , type="b" ,xlab=(paste("probability of", i)) , ylab="posterior probability" )
+
+  print(plot)
+ 
+}
+
+
+
+#try out
+i = 1
+for (i in df1$name) {
+  
+  dens = 20
+  grid <- seq(from=0, to=1, length.out = dens)
+prior <- dnorm(grid, mean = 0.5, sd = 0.2)
+
+likelihood<- dbinom(df$cor_ans[df$name == i], df$questions[df$name == i], prob = grid)
+
+unstd.posterior <- likelihood * prior
+
+posterior <- unstd.posterior / sum(unstd.posterior)
+
+prob <- data.frame(grid =grid, posterior = posterior, prior = prior, likelihood = likelihood)
+ 
+plot <- plot( grid , posterior , type="b" ,xlab=(paste("probability of", i)) , ylab="posterior probability" )
+
+  print(plot)
+ 
+}
+```
+
+
+6. Optional question: Can you estimate the difference between Riccardo's estimated knowledge and that of each of the other teachers? Would you deem it credible (that is, would you believe that it is actually different)?
