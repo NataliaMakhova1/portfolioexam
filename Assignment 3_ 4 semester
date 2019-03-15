@@ -1,0 +1,673 @@
+---
+title: "Assignment3"
+author: "Natalia, Katarina, Maria, Alex"
+date: "3/6/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/natal/Google Drive/study/4 semester/computational modeling")
+#install.packages("brms")
+library(brms)
+library(tidyverse)
+#library(devtools)
+library(lme4)
+library(rethinking)
+library(ggplot2)
+
+```
+
+## Multivariate linear models
+
+In this assignment you will investigate the relation between different aspects of IQ and symptom severity in ASD (as measured by ADOS). The assignment is meant to make you practice on linear models, multiple predictors and interactions.
+
+The data you will use is the outcome of the psychological testing of the children you analyzed in methods 3.
+Data: https://www.dropbox.com/s/hom2qnmp9hyfwmu/Assignment3Data.csv?dl=0
+The data consists of ChildID, gender, age, diagnosis (ASD), symptom severity (ADOS), several aspects of IQ (NonVerbal/Perceptual,Verbal,Social) and the visit at which the tests were administered. The questions should be answered by focusing on visit 1.
+
+The questions you will have to answer are:
+
+1. Assess the relation between symptom severity and IQ (focus on visit 1 and children with ASD) and report the model, a plot of the model, a couple of lines describing the quality of the model and interpreting the results. P.S. Should you scale? P.P.S. Don't forget to motivate your priors. P.P.P.S. At least one plot for results and a plot for quality of each model (here and in the next questions) would be appreciated.
+1.1. Verbal IQ and ADOS
+1.2. Non Verbal IQ and ADOS
+1.3. Social IQ and ADOS
+
+```{r}
+
+data <- read.csv("Assignment3Data.csv")
+
+sub_d <- subset(data, data$Visit == 1 & data$ASD == 1)
+
+#to check correlation, we do the cor.test
+cor.test(sub_d$VerbalIQ, sub_d$ADOS, data=sub_d)
+#-0.7225955 - since our variables are correlated, it's a goood idea to centered the data.
+
+#also looking into the data, we see different scales. So standadizing is also a good idea
+
+sub_d$VerbalIQ_s = scale(sub_d$VerbalIQ, scale = T)
+
+#plot the data
+
+plot(sub_d$VerbalIQ_s, sub_d$ADOS)
+
+#we are using rethinking function, to give us defualt priors when transforming lm formula to map style
+
+glimmer(ADOS~VerbalIQ, data=sub_d)
+#alist(ADOS ~ dnorm( mu , sigma ),
+#mu <- Intercept +
+ #       b_VerbalIQ*VerbalIQ,
+  #  Intercept ~ dnorm(0,10),
+   # b_VerbalIQ ~ dnorm(0,10),
+    # sigma ~ dcauchy(0,2)
+#)
+
+#since we got default priors, we try to find, if we can use them
+
+range(sub_d$ADOS) # 0 to 21
+#we assume that sigma in uniform, flt prior. therefore, we are not using cauchy, but inform 
+#sigma~duniform
+
+#sd of 10 is upper boundary because our range of ados goes from 0 to 21. Therefore 95% of our ADOS will be in there. and it can't go lower than 0 so it's our lowest boundary.
+#sigma ~ dunif( 0 , 10 )
+
+range(sub_d$VerbalIQ_s) # -1.311613  1.977092
+# it gives us the upper boundary for beta value, because the range never extends 2. Therefore our beta value can never be bigger than 1.
+sd(sub_d$VerbalIQ_s) #1
+
+#we also expect the higher gets the verbalIQ the lower gets ADOS. therefore the intercept should be inside ADOS distribution (0 to 21). taking large sd, we can use parameter given us as default
+#a~dnorm (0,10)
+
+mean(sub_d$VerbalIQ_s) #2.220446e-16 - very close to 0. 
+
+#so our model look likes:
+verbalIQ_m <- map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + b*VerbalIQ_s ,
+    a ~ dnorm(0,10) ,
+    b ~ dnorm( 0 , 1) ,
+    sigma ~ dunif( 0 , 10 )
+    ) ,
+  data=sub_d )
+
+#summary
+precis(verbalIQ_m)
+#but we want our model to account for uncertainty
+precis(verbalIQ_m, corr = TRUE)
+
+#plot the results of the model: parameter plot
+plot(precis(verbalIQ_m))
+
+#plot data and the model
+plot(sub_d$VerbalIQ_s, sub_d$ADOS, main = "Verbal IQ and ADOS relation", xlab= "verbalIQ", ylab="ADOS")
+abline( a=coef(verbalIQ_m)["a"] , b=coef(verbalIQ_m)["b"] )
+
+
+#prior predictive check, just to make sure that we reason it's correctly
+prior_muv = rnorm(sub_d$VerbalIQ_s, 0 , 1)
+
+plot(prior_muv)
+
+prior_data <- cbind(sub_d, prior_muv)
+
+plot(prior_data$prior_muv, prior_data$ADOS)
+
+#comparing plots ADos vs VerbalIQ and Ados vs prior: so we can see that there is some similiarity in pattern distribution. thereofre, we can assume that prior we reasoned and chosen correctly.
+
+#next step is to check posterior: to see if our model goes along with our data.
+posterior = extract.samples(verbalIQ_m)
+posterior[1:5,]
+
+#plot(posterior)
+
+#checking correlation between coeficiences
+plot(b ~ a, posterior)
+plot(sigma~b, posterior)
+plot(sigma~a, posterior)
+
+
+#crating grid
+
+grid = data.frame(VerbalIQ_s = seq(-2, 2, length.out = 2))
+
+
+#creating data set that we will plot
+
+plotdata = cbind(grid, t(link(verbalIQ_m, data = grid, n=10))) %>%
+  gather("iteration", "ADOS", -VerbalIQ_s)
+
+
+#plot new data #we are done by having this plot
+ggplot(plotdata, aes(VerbalIQ_s, ADOS, group = iteration)) +
+  geom_line() +
+  geom_point(aes(group = NA), data = sub_d)
+
+
+
+```
+
+
+```{r}
+#Nonverbal IQ and ADOS
+cor.test(sub_d$NonVerbalIQ, sub_d$ADOS)
+#cor -0.5783703 
+# standardizng to get data on the same scale
+sub_d$NonVerbalIQ_s = scale(sub_d$NonVerbalIQ, scale = T)
+
+plot(sub_d$NonVerbalIQ_s, sub_d$ADOS)
+#just giving a default priors for bayesian formula,
+glimmer(ADOS ~ NonVerbalIQ_s, data = sub_d)
+#alist(
+#    ADOS ~ dnorm( mu , sigma ),
+#    mu <- Intercept +
+#        b_NonVerbalIQ_s*NonVerbalIQ_s,
+ #   Intercept ~ dnorm(0,10),
+ #   b_NonVerbalIQ_s ~ dnorm(0,10),
+  #  sigma ~ dcauchy(0,2)
+#)
+
+
+# checking if we can use default priors
+
+range(sub_d$ADOS)# 0 21
+range(sub_d$NonVerbalIQ_s)#  -2.578323  2.796363
+sd(sub_d$NonVerbalIQ_s)#1
+
+
+mean(sub_d$NonVerbalIQ_s)#close to 0
+
+#mu - mean, first number is mean of ADOS
+#alpha- intercept is mean of our xi(predictor - ADOS) when everything else is 0
+#beta -slope, how much our intercept change per 1 unit(slope), it gives us 1 as a upper boundary for beta because range does not reach 2 
+#sigma - sd
+#sd of 10 is upper boundary because our range of ados goes from 0 to 21. Therefore 95% of our ADOS will be in this interval
+# dnorm -> returns the value of the probability density function for the normal distribution
+# model for Nonverbal IQ predicting ADOS
+nv_m <- map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + b*NonVerbalIQ_s ,
+    a ~ dnorm(0, 10),
+    b ~ dnorm( 0 , 1),
+    sigma ~ dunif( 0 , 10 )
+    ),
+  data=sub_d )
+
+
+# summary
+precis(nv_m)
+
+#account for uncertainity
+precis(nv_m , corr=TRUE )
+#        Mean StdDev  5.5% 94.5%     a     b sigma
+#a     13.79   0.65 12.75 14.84  1.00 -0.01 -0.02
+#b     -1.86   0.57 -2.78 -0.95 -0.01  1.00  0.25
+#sigma  3.82   0.48  3.06  4.59 -0.02  0.25  1.00
+
+#alpha is not correlated with beta, beta is correlated with alpha, and beta is little bit correlated with sigma
+ 
+
+
+#plot the results of the model: parameter plot
+plot(precis(nv_m))
+
+#plot data and the model
+plot(sub_d$NonVerbalIQ_s, sub_d$ADOS, main = "Non Verbal IQ and ADOS relation", xlab= "NonVerbalIQ", ylab="ADOS")
+abline(a=coef(nv_m)["a"], b=coef(nv_m)["b"])
+
+
+#prior predictive check, just to make sure that we reason it's correctly
+prior_mu_nv = rnorm(sub_d$NonVerbalIQ_s, 0 , 1)
+
+plot(prior_mu_nv)
+
+prior_data_nv <- cbind(sub_d, prior_mu_nv)
+
+plot(prior_data_nv$prior_mu_nv, prior_data_nv$ADOS)
+
+
+
+#next step is to check priors to see if our model goes along with the data
+
+
+posterior = extract.samples(nv_m)
+posterior[1:5,]
+# #    a         b    sigma
+# 1 13.22259 -2.005162 4.163624
+# 2 13.57285 -2.314573 4.219042
+# 3 14.59629 -2.607196 2.770334
+# 4 13.74603 -1.116475 3.875984
+# 5 12.84384 -2.745708 2.895776
+
+#plot(posterior)
+
+#checking correlation between coeficiences
+plot(b ~ a, posterior)
+plot(sigma~b, posterior)
+plot(sigma~a, posterior)
+
+
+#crating grid
+
+grid = data.frame(NonVerbalIQ_s = seq(-3, 3, length.out = 3))
+#length. out -> desired length of the sequence.
+
+#creating data set that we will plot
+
+plotdata = cbind(grid, t(link(nv_m, data = grid, n=10))) %>%
+  gather("iteration", "ADOS", -NonVerbalIQ_s)
+
+
+#plot new data #we are done by having this plot
+ggplot(plotdata, aes(NonVerbalIQ_s, ADOS, group = iteration)) +
+  geom_line() +
+  geom_point(aes(group = NA), data = sub_d)
+
+
+
+```
+
+
+
+```{r}
+#Social IQ and ADOS
+
+#to check correlation, we do the cor.test
+cor.test(sub_d$SocialIQ, sub_d$ADOS, data=sub_d)
+#-0.6695893 - since our variables are correlated, it's a goood idea to centered the data.
+
+#also looking into the data, we see different scales. So standardizing is also a good idea
+
+sub_d$SocialIQ_s = scale(sub_d$SocialIQ, scale = T)
+
+#plot the data
+
+plot(sub_d$SocialIQ_s, sub_d$ADOS)
+
+#we are using rethinking function, to give us defualt priors when transforming lm formula to map style
+
+glimmer(ADOS~SocialIQ, data=sub_d)
+#alist(
+#    ADOS ~ dnorm( mu , sigma ),
+#    mu <- Intercept +
+#        b_SocialIQ*SocialIQ,
+#    Intercept ~ dnorm(0,10),
+#    b_SocialIQ ~ dnorm(0,10),
+#    sigma ~ dcauchy(0,2)
+#)
+
+#since we got default priors, we try to find, if we can use them
+
+range(sub_d$ADOS) # 0 to 21
+#we assume that sigma in uniform, flt prior. therefore, we are not using cauchy, but inform 
+#sigma~duniform
+
+#sd of 10 is upper boundary because our range of ados goes from 0 to 21. Therefore 95% of our ADOS will be in there. and it can't go lower than 0 so it's our lowest boundary.
+#sigma ~ dunif( 0 , 10 )
+
+range(sub_d$SocialIQ_s) # -1.500772  2.376871
+# it gives us the upper boundary for beta value, because the range never extends 2. Therefore our beta value can never be bigger than 1.
+
+sd(sub_d$SocialIQ_s) #1
+
+#we also expect the higher gets the socialIQ the lower gets ADOS. therefore the intercept should be inside ADOS distribution (0 to 21). taking large sd, we can use parameter given us as default
+#a~dnorm (0,10)
+
+mean(sub_d$SocialIQ_s) #-1.360152e-16 - very close to 0.
+
+#so our model look likes:
+socialIQ_m <- map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + b*SocialIQ_s ,
+    a ~ dnorm(0,10) ,
+    b ~ dnorm( 0 , 1) ,
+    sigma ~ dunif( 0 , 10 )
+    ) ,
+  data=sub_d )
+
+
+#devtools::install_github("rmcelreath/rethinking", force = TRUE)
+
+#summary
+precis(socialIQ_m)
+#but we want our model to account for uncertainty
+precis(socialIQ_m, corr = TRUE)
+plot(precis(socialIQ_m))
+
+#plot data and the model
+plot(sub_d$SocialIQ_s, sub_d$ADOS, main = "Social IQ and ADOS relation", xlab= "SocialIQ", ylab="ADOS")
+abline(a=coef(socialIQ_m)["a"], b=coef(socialIQ_m)["b"])
+
+#prior predictive check, just to make sure that we reason it's correctly
+
+prior_mu_social = rnorm(sub_d$SocialIQ_s, 0 , 1)
+
+plot(prior_mu_social)
+
+
+prior_data_so <- cbind(sub_d, prior_mu_social)
+
+plot(prior_data_so$prior_mu_social, prior_data_so$ADOS)
+
+#next step is to check posterior: to see if our model goes along with our data.
+posterior_social = extract.samples(socialIQ_m)
+posterior_social[1:5,]
+
+#plot(posterior)
+
+#checking correlation between coeficiences
+plot(b ~ a, posterior_social)
+
+plot(sigma~b, posterior_social)
+plot(sigma~a, posterior_social)
+
+
+#crating grid
+
+grid = data.frame(SocialIQ_s = seq(-2, 3, length.out = 2))
+
+
+#creating data set that we will plot
+
+plotdata2 = cbind(grid, t(link(socialIQ_m, data = grid, n=10))) %>%
+  gather("iteration", "ADOS", -SocialIQ_s)
+
+
+#plot new data #we are done by having this plot
+ggplot(plotdata2, aes(SocialIQ_s, ADOS, group = iteration)) +
+  geom_line() +
+  geom_point(aes(group = NA), data = sub_d)
+
+```
+
+
+2. Do the different aspects of IQ account for different portions of the variance in ADOS? 
+2.1. Does it make sense to have all IQ measures in the same model? First write a few lines answering the question and motivating your answer, including a discussion as to what happens when you put all of them in the same model. Then build a model following your answer. If your answer is "no", you are not free, you still have to answer: are there alternative ways of answering the question?
+2.2. Build the model, assess its quality, write a few lines interpreting the results.
+
+```{r}
+
+
+sub_d$NonVerbalIQ_s <- scale(sub_d$NonVerbalIQ, scale = T)
+sub_d$SocialIQ_s <- scale(sub_d$SocialIQ, scale = T)
+
+# correlation test to see how several aspects of IQs are related with each other.
+cor.test(sub_d$NonVerbalIQ_s, sub_d$VerbalIQ_s) #0.6759356 
+cor.test(sub_d$NonVerbalIQ_s, sub_d$SocialIQ_s) #0.3747165 
+cor.test(sub_d$SocialIQ_s, sub_d$VerbalIQ_s) #0.6102297
+
+#assumption:
+#we see some positive correlation, but it's not critical. therefore, we can expect not very much shared variance to be thrown away.
+
+
+
+all_IQ <- map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + bS*SocialIQ_s + bV*VerbalIQ_s + bN*NonVerbalIQ_s ,
+    a ~ dnorm(0 ,10),
+    bS ~ dnorm( 0 , 1),
+    bV ~ dnorm( 0 , 1),
+    bN ~ dnorm(0, 1),
+    sigma ~ dunif(0 ,10)
+    ) ,
+  data=sub_d)
+
+precis(all_IQ, corr = TRUE)
+
+ 
+#plot the model
+plot( ADOS ~ SocialIQ_s + VerbalIQ_s + NonVerbalIQ_s  , data= sub_d )
+
+
+#plot the results
+plot(precis(all_IQ))
+
+
+#Plot the prediction error
+# call link without specifying new data
+# so it uses original data
+mu <- link( all_IQ )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data
+ados.sim <- sim( all_IQ , n=1e4 )
+ados.PI <- apply( ados.sim , 2 , PI )
+
+plot( mu.mean ~ sub_d$ADOS , col=rangi2 , ylim=range(mu.PI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(sub_d) )
+lines( rep(sub_d$ADOS[i],2) , c(mu.PI[1,i],mu.PI[2,i]) ,
+col=rangi2 )
+#identify( x=sub_d$ADOS, y=mu.mean , labels=sub_d$ChildID , cex=0.8 )
+
+#Predicted ADOS against observed, with 89% confdence intervals of the average prediction. The dashed line shows perfect prediction.
+# makes it hard to see the amount of prediction error, in many cases. For this reason, lots of people also use residual plots that show the mean prediction error for each row.
+
+
+
+```
+
+
+3. Let's now include also the TD children. Does it make sense to ask whether IQ and ADOS are related? Motivate your answer. In any case, if you wanted to build a model to answer that question, which model would you build? Run the model, assess its quality, write a few lines interpreting the results.
+
+- it makes sense to predict ADOS from IQ, because one of the observed symptom of ASD is imparement in speech development.
+
+```{r}
+
+# data subset including TD children, still only visit == 1
+data_all = subset(data, data$Visit == 1, na.remove = T)
+plot(data_all$ADOS)
+
+# scaling 
+data_all$VerbalIQ_s = scale(data_all$VerbalIQ,  scale = T)
+data_all$NonVerbalIQ_s = scale(data_all$NonVerbalIQ,  scale = T)
+data_all$SocialIQ_s = scale(data_all$SocialIQ,  scale = T)
+# remove NA
+data_all  = na.omit(data_all)
+# cheking distribution of ADOS for TD and ASD
+plot(data_all$ADOS[data_all$ASD == 1]) #assumption: distribution looks as expected, we see that most of the childer with ASD have higher ADOS except for one (probably experimnet mistake)
+ggplot(data_all, aes(ADOS))+geom_density()
+
+
+
+# modelling: we take the model that we use in 2d task where we have all the predictors, but with data for both ASD and we create new model with ASD as predictor. Then we will compare them
+m_IQs = map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + b.v*VerbalIQ_s + b.nv*NonVerbalIQ_s + b.s*SocialIQ_s ,
+    a ~ dnorm(0,10),
+    b.v ~ dnorm( 0 , 1) ,
+    b.nv ~ dnorm( 0 , 1) ,
+    b.s ~ dnorm( 0 , 1) ,
+    sigma ~ dunif(0 ,10)
+  ),
+  data=data_all )
+precis(m_IQs)
+plot(precis(m_IQs))
+
+
+#When we included TD children, the posterior mean for verbal and nonverbal IQ is close to zero. Thus, once we know social IQ of a children, there is no or little additional predictive power in also knowing the verbal and nonverbal IQ. 
+
+#Plot the prediction error
+# call link without specifying new data
+# so it uses original data
+mu <- link( m_IQs )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data
+ados.sim <- sim( m_IQs, n=1e4 )
+ados.PI <- apply( ados.sim , 2 , PI )
+
+plot( mu.mean ~ data_all$ADOS , col=rangi2 , ylim=range(mu.PI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(data_all) )
+lines( rep(data_all$ADOS[i],2) , c(mu.PI[1,i],mu.PI[2,i]) ,
+col=rangi2 )
+
+m_ASD = map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + b_d * ASD + b_v*VerbalIQ_s + b_nv*NonVerbalIQ_s + b_s*SocialIQ_s ,
+    a ~ dnorm(0 , 10),
+    b_d ~ dnorm(0 , 1), #this is binomial distribution 0 or 1, so we assume that 
+    b_v ~ dnorm( 0 , 1) ,
+    b_nv ~ dnorm( 0 , 1.) ,
+    b_s ~ dnorm( 0 , 1) ,
+    sigma ~ dunif(0 ,10)
+  ),
+  data=data_all )
+
+precis(m_ASD)
+plot(precis(m_ASD))
+#again the results show no additional predictive power in knowing Verbal and Nonverbal IQ when we know ASD and Social IQ of children. However, as can be seen from the graph,  this model seems to have smaller error because the datapoints are closer to dotted line which represents the perfect fit. 
+
+
+#Plot the prediction error
+# call link without specifying new data
+# so it uses original data
+mu <- link( m_ASD )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data
+ados.sim <- sim( m_ASD, n=1e4 )
+ados.PI <- apply( ados.sim , 2 , PI )
+
+plot( mu.mean ~ data_all$ADOS , col=rangi2 , ylim=range(mu.PI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(data_all) )
+lines( rep(data_all$ADOS[i],2) , c(mu.PI[1,i],mu.PI[2,i]) ,
+col=rangi2 )
+
+#this model seems to be better in predictions 
+
+
+
+```
+
+
+
+
+4. Let's discuss contents:
+4.1. You have three scores for IQ, do they show shared variance? Is that the same in TD and ASD? What does that tell us about IQ?
+4.2. You have explored the relation between IQ and ADOS. How do you explain that relation from a cognitive perspective? N.B. You can present alternative hypotheses.
+
+```{r}
+
+#model for TD children 
+
+sub_n = subset(data, data$Visit == 1 & data$ASD == 0,  na.remove = T)
+
+sub_n$VerbalIQ_s = scale(sub_n$VerbalIQ, scale = T)
+sub_n$NonVerbalIQ_s = scale(sub_n$NonVerbalIQ, scale = T)
+sub_n$SocialIQ_s = scale(sub_n$SocialIQ, scale = T)
+
+plot(sub_n$ADOS)
+
+sub_n  = na.omit(sub_n)
+
+
+
+range(sub_n$ADOS) # 0 to 5
+
+
+
+all_IQ_TD <- map(
+  alist(
+    ADOS ~ dnorm( mu , sigma ) ,
+    mu <- a + bS*SocialIQ_s + bV*VerbalIQ_s + bN*NonVerbalIQ_s ,
+    a ~ dnorm(0 ,10),
+    bS ~ dnorm( 0 , 1),
+    bV ~ dnorm( 0 , 1),
+    bN ~ dnorm(0, 1),
+    sigma ~ dunif(0 ,10)
+    ) ,
+  data=sub_n)
+
+precis(all_IQ_TD, corr = TRUE)
+
+
+ 
+#plot the model
+plot( ADOS ~ SocialIQ_s + VerbalIQ_s + NonVerbalIQ_s  , data= sub_n )
+
+
+#plot the results
+plot(precis(all_IQ_TD))
+
+
+#Plot the prediction error
+# call link without specifying new data
+# so it uses original data
+mu <- link( all_IQ_TD )
+# summarize samples across cases
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+# simulate observations
+# again no new data, so uses original data
+
+ados.sim <- sim( all_IQ_TD , n=1e4 )
+ados.PI <- apply( ados.sim , 2 , PI )
+
+plot( mu.mean ~ sub_n$ADOS , col=rangi2 , ylim=range(mu.PI) ,
+xlab="Observed ADOS" , ylab="Predicted ADOS" )
+abline( a=0 , b=1 , lty=2 )
+for ( i in 1:nrow(sub_d) )
+lines( rep(sub_n$ADOS[i],2) , c(mu.PI[1,i],mu.PI[2,i]) ,
+col=rangi2 )
+
+#we made a model for TD children only and we can see that 
+
+
+ggplot(data_all, aes(x = SocialIQ_s, y = ADOS, colour = ASD)) + 
+  geom_point()
+
+
+```
+
+
+```{r}
+#Verbal IQ
+cor.test(data$ADOS, data$VerbalIQ)#cor -0.3700182higher ADOS  lower Verbal IQ
+# data:  data$ADOS and data$VerbalIQ
+# t = -3.3084, df = 69, p-value = 0.001493
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  -0.5553780 -0.1496317
+
+cor.test(data$ADOS, data$SocialIQ)
+# data:  data$ADOS and data$SocialIQ
+# t = -13.593, df = 135, p-value < 2.2e-16
+# alternative hypothesis: true correlation is not equal to 0
+# 95 percent confidence interval:
+#  -0.8229515 -0.6790042
+# sample estimates:
+#        cor 
+# -0.7601537
+
+##we ran correlation analyses to investigate the relationships among the variables of interest. In particular, correlational analyses assessed the relation between ADOS and  e.g.VIQ and we can see they are negatively correlated which means the higher ADOS  the lower VerbalIQ and vice versa. 
+
+
+cor.test(data$ADOS, data$NonVerbalIQ)#cor -0.09598439, not significant
+#         cor 
+# -0.09598439
+```
+
+
+5. Bonus questions: Including measurement errors. 
+5.1. Let's assume that ADOS has a measurement error of 1. How would you model that in any of the previous models? 
+5.2. We know that IQ has an estimated measurement error of 2.12. How would you include that? 
+
+
