@@ -1,0 +1,333 @@
+---
+title: "CogSci Eye-tracking Workshop 2019 - Day 5"
+author: "Natalia, Katarina, Maria, Alex"
+date: "12/2/2019"
+output:
+  html_document:
+#    theme: paper
+    highlight: zenburn
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = 'center')
+```
+
+```{r libraries}
+library(tidyverse)
+library(lme4)
+
+setwd("C:/Users/natal/Google Drive/study/4 semester/computational modeling/Day5")
+
+```
+
+## Load data
+```{r load data}
+## Set working directory to the relevant one on your computer
+#getwd()
+
+Fixations <- read_csv("fixations2018_2019.csv")
+Saccades <- read_csv('saccades2018_2019.csv')
+
+# Make sure variables are of the right type
+Fixations <- Fixations %>%
+  mutate(
+    ParticipantID = as.factor(ParticipantID),
+    Year = as.factor(Year),
+    Task = as.factor(Task),
+    ParticipantGender = as.factor(ParticipantGender),
+    Item = as.factor(Item)
+  )
+
+Saccades <- Saccades %>%
+  mutate(
+    ParticipantID = as.factor(ParticipantID),
+    Direction = as.factor(Direction),
+    Year = as.factor(Year),
+    Task = as.factor(Task),
+    ParticipantGender = as.factor(ParticipantGender),
+    Item = as.factor(Item)
+  )
+```
+
+
+Visual Search 
+```{r}
+library(scales)
+
+Fixations$StartTime <- rescale(Fixations$StartTime)
+
+Saccades$StartTime <- rescale(Saccades$StartTime)
+Saccades$Trial <- rescale(Saccades$Trial)
+
+
+####FIXATION DURATION########
+
+model_ft<- glmer(Duration ~  StartTime + (1|Item) + (1|ParticipantID), Fixations, family = gaussian(link = log),control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+summary(model_ft)
+r.squaredGLMM(model_ft)
+#              R2m       R2c
+#[1,] 1.186213e-08 0.1953623
+
+model_fx <- glmer(Duration ~ Task * StartTime  + (1|ParticipantID), Fixations, family = gaussian(link = log),control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+summary(model_fx)
+library(MuMIn)
+r.squaredGLMM(model_fx)
+
+#         R2m        R2c
+#[1,] 6.784683e-07 0.06357921
+
+
+
+#interaction is significat because  an effect of the task changes over time 
+#duration of fixation differ in tasks 
+#start time is also significant predictor of duration
+#inercept - mean duration of fixation - we need to exp transform it first 
+#taskstar - change in the velocity when you go from count to star 
+
+#(1|pID) + (0+Task|pID) - incuding two random effects with the assumption that they are not correlated 
+
+#model_simple <- glmer(Duration~ Task + StartTime + (1|Item) + (1|ParticipantID), Fixations, family = gaussian(link = log),control=glmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2e5)))
+
+#summary(model_simple)
+
+#Duration ~Task *StartTime + (1 +Task + StartTime|Item) + (1|Participant ) + (0 + Task)
+model_fx_real <- glmer(Duration ~Task *StartTime + (1 + StartTime|ParticipantID), Fixations, family = gaussian(link = log),control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+summary(model_fx_real)
+plot(residuals(model_fx_real))
+plot(model_fx_real)
+
+r.squaredGLMM(model_fx_real)
+#              R2m       R2c
+#[1,] 6.315179e-07 0.1591527
+
+######SACCADE AMPLITUDE####
+
+# sac_trial <- data.frame(Saccades)
+# sac_trial$Amplitude <- rescale(sac_trial$Amplitude)
+# 
+# model_sac_trial<- glmer(Amplitude ~ Task * StartTime  + (1|Item) + (1|ParticipantID), sac_trial, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)))
+# 
+# 
+# summary(model_sac_trial)
+
+#model_st_trial <- glmer(Amplitude ~ Task*StartTime  + (1|Item) + (1|ParticipantID), Saccades, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+ #                           optCtrl=list(maxfun=2e5)))
+
+#summary(model_st_trial)
+
+
+model_st <- glmer(Amplitude ~ Task * StartTime  + (1|Item) + (1|ParticipantID), Saccades, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+summary(model_st)
+r.squaredGLMM(model_st)
+
+#model_sn <- glmer(Amplitude ~ Task*StartTime  + (1|Item) + (1|ParticipantID), Saccades, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa", optCtrl=list(maxfun=2e5)))
+
+#summary(model_sn)
+#amplitude in task(count) is not significantly different from mean amplitude
+#however in star task it is different from mean and that would be probably because 
+# we do not have a searching pattern as in counting task 
+#when we look at the task find the star, it tells us that it differs from intercept. star condition affects amplitude in a way that saccades with time become longer.
+#start time affect amplitude in a way that over time the saccades become shorter (negative intercept)
+
+#Amplitude ~ Task + StartTime + (1|Item) + (1|Participant)
+#Amplitude ~ Task + StartTime + (1+Task|Participant) 
+
+########SACADE VELOCITY#####
+
+#model_sv <- glmer(MeanVelocity ~ Task + StartTime  + (1|Item) + (1|ParticipantID), Saccades, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+ #                           optCtrl=list(maxfun=2e5)))
+#summary(model_sv)
+
+
+model_sv_trial <- glmer(MeanVelocity ~ Task * StartTime  + (1|Item) + (1|ParticipantID), Saccades, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+summary(model_sv_trial)
+r.squaredGLMM(model_sv_trial)
+
+#Velocity ~ Task + StartTime + (1|Item) + (1|Participant)
+#
+
+```
+
+
+SOCIAL ENGAGEMENT
+```{r}
+
+library(stringr)
+
+logfiles <- read.csv("logfilesSE.csv")
+fixations2018 <- subset(Fixations, Year == 2018 & Task == 'SocialEngagement')
+saccades2018 <- subset(Saccades, Year == 2018 & Task == 'SocialEngagement')
+
+FixNew <- merge(fixations2018, logfiles)
+
+SacNew <- merge(saccades2018, logfiles)
+
+FixNew$dirdiv <- 0
+
+FixNew$dirdiv <- grepl("dir", FixNew$Video)
+FixNew$dirdiv[FixNew$dirdiv == "TRUE"] <- "dir"
+FixNew$dirdiv[FixNew$dirdiv == "FALSE"] <- "div"
+
+FixNew$o <- grepl("\\+o", FixNew$Video)
+FixNew$o[FixNew$o == "TRUE"] <- "+o"
+FixNew$o[FixNew$o == "FALSE"] <- "-o"
+
+FixNew$dirdv <- NULL
+SacNew$dirdv <- NULL
+SacNew$dirdiv <- 0
+SacNew$o <- 0
+
+SacNew$dirdiv <- grepl("dir", SacNew$Video)
+SacNew$dirdiv[SacNew$dirdiv == "TRUE"] <- "dir"
+SacNew$dirdiv[SacNew$dirdiv == "FALSE"] <- "div"
+
+SacNew$o <- grepl("\\+o", SacNew$Video)
+SacNew$o[SacNew$o == "TRUE"] <- "+o"
+SacNew$o[SacNew$o == "FALSE"] <- "-o"
+str(FixNew)
+
+FixNew$o <- as.factor(FixNew$o)
+FixNew$dirdiv <- as.factor(FixNew$dirdiv)
+
+```
+
+
+```{r}
+
+
+FixNew$StartTime <- rescale(FixNew$StartTime)
+
+#model_fix_dur <- glmer(Duration ~ o * dirdiv * StartTime  +(1+ StartTime|ParticipantID), FixNew, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+ #                           optCtrl=list(maxfun=2e5)))
+
+#summary(model_fix_dur)
+
+model_fix_dur_tr <- glmer(Duration ~ o*dirdiv*StartTime  +(1|ParticipantID), FixNew, family = gaussian(link = log), control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+
+summary(model_fix_dur_tr)
+r.squaredGLMM(model_fix_dur_tr)
+ #             R2m        R2c
+#[1,] 2.521362e-08 0.08877436
+
+ model_pupil_seize <- glmer(PupilSize ~ o*dirdiv*StartTime +(1|ParticipantID), FixNew, family = gaussian(link = log),  control=glmerControl(optimizer="bobyqa",
+                            optCtrl=list(maxfun=2e5)))
+
+summary(model_pupil_seize)
+r.squaredGLMM(model_pupil_seize)
+#             R2m        R2c
+#[1,] 5.912315e-08 0.09727486
+
+qqnorm(residuals(model_fx))
+hist(residuals(model_fx))
+
+qqnorm(residuals(model_sv))
+hist(residuals(model_sv))
+
+qqnorm(residuals(model_st))
+hist(residuals(model_st))
+
+qqnorm(residuals(model_st))
+hist(residuals(model_st))
+
+qqnorm(residuals(model_fix_dur))
+hist(residuals(model_fix_dur))
+
+hist(residuals(model_pupil_seize))
+qqnorm(residuals(model_pupil_seize))
+
+#The results from predicting amplitude in saccades data set: #b, se, p the numbers are under log transformation.
+#model: Amplitude~Task + StartTime
+#intercept:  1.00053 ; 0.06694 ; p< .001
+#TaskVisualSearch_Star: 0.51025  ;  0.07676 ; p< .001
+#StartTime: -0.34969 ; 0.04453  ; p< .001
+
+#Effect size of the model R^2C = 0.04714993 - really smal effect size.
+
+
+#the results from mean velocity model in saccades data set: (all numbers are under log transformation)
+#(Intercept)             4.31152  ;  0.05613 ; < 2e-16 *
+#TaskVisualSearch_Star   0.36734  ; 0.07380 ;  6.44e-07 *
+#StartTime              -0.20484  ;  0.02443 ;  < 2e-16 *
+
+#Effect size of the model R^2C = 0.03556037 - really smal effect size
+
+#For fixations we used interaction beween Task and StartTime as our independent variabl. And as random effect we used only ParticipantID, because othrewise model wouldn't converge. The model we used:
+#the results from duration in fixations data set: (all numbers are under log transformation)
+#(Intercept)                        6.4520  ;  0.0773 ; < 2e-16 *
+#TaskVisualSearch_Count            -0.8810  ;  0.1110 ; 2.09e-15 *
+#TaskVisualSearch_Star             -0.9830     0.1101 ; < 2e-16 *
+#StartTime                         -1.0837     0.2890 ; 0.000177 *
+#TaskVisualSearch_Count:StartTime   1.3803     0.3005 ; 4.36e-06 *
+#TaskVisualSearch_Star:StartTime    1.2914     0.2940 ; 1.12e-05 *
+
+#Effect size of the model R^2C = 0.06341642 - really smal effect size
+
+
+
+#We hypothesized that we are more emotionally engaged when involved in interaction with other people. Thus, we investigated the effects of ostensiveness and eye direction on pupil size and the duration of fixations. We included triple interaction of ostensivness, direction and start time in both models because we expect that direct stare at person will lead to arousal which is changing in accordance to time. In order for our model to converge, we rescaled variable Starttime and due to the longtail distribution, we applied log tranformation.
+#In the first model, our dependent variable was duration of fixation predicted by independent variables - ostensivness, direction and start time. Moreover, we included participant as random intercept because we suppose each participant to have different baseline. However, none of the predictors or interactions were found to be significant. 
+
+#model: Duration ~ o * dirdiv * StartTime + (1 | ParticipantID)
+#                         Estimate   Std.Error t value   P(>|z|)
+#(Intercept)              6.79437    0.17101  39.732   <2e-16 ***
+#o+o                     -0.18579    0.19489  -0.953   0.3404    
+#dirdivdiv               -0.07239    0.17765  -0.407   0.6837    
+#StartTime               -0.61620    0.34932  -1.764   0.0777 . 
+
+#Effect size of a model:  R2c = 0.08877428
+
+#In the second model, we tried to predict the change of pupil size affected ostensivness and eye-direction. Thus, our dependent variable was pupil size and independent variables were the same as in the previous model - ostensivness, direction and start time. The only significant predictor of pupil size was starttime. 
+
+#model: PupilSize ~ o * dirdiv * StartTime + (1 | ParticipantID)
+#                         Estimate Std. Error t value Pr(>|z|)   
+#(Intercept)              7.482623   0.134872  55.479  < 2e-16 ***
+#o+o                      0.005663   0.023607   0.240   0.8104    
+#dirdivdiv               -0.038958   0.023164  -1.682   0.0926 .  
+#StartTime                0.145613   0.035722   4.076 4.58e-05 ***
+
+#Effect size of a model:  R2c = 0.09728303
+
+
+
+```
+
+
+```{r}
+
+
+visual_search <- subset(Fixations, Task != "SocialEngagement")
+visual_search_sac <- subset(Saccades, Task != "SocialEngagement")
+
+visual_search <- visual_search[visual_search$Duration!=11864, ]
+visual_search <- visual_search[visual_search$Duration!=6040, ]
+
+ggplot(visual_search, aes(x = Task, y = Duration , color = ParticipantID),
+colour=rainbow) + geom_boxplot()  + theme(legend.position = "none")
+
+ggplot(visual_search_sac, aes(x = Task, y = Amplitude , color = ParticipantID),
+colour=rainbow) + geom_boxplot()  + theme(legend.position = "none")
+
+ggplot(visual_search_sac, aes(x = MeanVelocity, y = StartTime, color = Task)) +geom_smooth()
+
+
+ggplot(FixNew, aes(x = dirdiv, y = Duration , color = ParticipantID),
+colour=rainbow) + geom_boxplot()  + theme(legend.position = "none")+ facet_wrap(~o)
+
+ggplot(FixNew, aes(x = dirdiv, y = PupilSize , color = ParticipantID),
+colour=rainbow) + geom_boxplot()  + theme(legend.position = "none")+ facet_wrap(~o)
+
+ggplot(FixNew, aes(x = dirdiv, y = Duration ),
+colour=rainbow) + geom_boxplot()  + theme(legend.position = "none")+ facet_wrap(~o)
+
+
+
+
+
+
+```
