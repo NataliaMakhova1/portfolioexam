@@ -1,6 +1,6 @@
 ---
 title: "Computational Modeling - Week 5 - Assignment 2 - Part 2"
-author: "Group 8"
+author: "Riccardo Fusaroli"
 date: "2/19/2017"
 output: html_document
 ---
@@ -67,13 +67,17 @@ predictive_distribution = function(name, size){
   # sampling 
   samples = sample(p_grid, prob = posterior, size = 10000, replace = T)
   
-  w = rbinom( 1e4 , size , prob = samples )
+  w = rbinom( 1e4 , size , prob = samples )#to see if we could actually predict their performance on the new CogSci test we set the size to the "new" size of the test, the number of the questions
   
   simplehist(w- 12)
-  
-  
 } 
 
+w <- rbinom(1e4, size=2, prob= 0.8)
+simplehist(w)
+
+simplehist(w)
+table(w)/1e4
+#we would not have expected Kristian to get only 8 right, anything above 8 would have been more plausible
 
 
 
@@ -123,3 +127,64 @@ for (t in full_d$name){
 geom_line(aes(grid,prior),color='red')+ xlab(paste("Knowledge of",t))+ ylab("posterior probability") 
   print(plot)
 }
+```
+
+
+
+2- Provide at least one plot and one written line discussing prediction errors for each of the teachers.
+```{r}
+library(rethinking)
+#Kristian
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) #this is some strong overfitting; we have only 6 data9points = questions to draw our knowledge from
+prior <-dnorm(p_grid,0.8,0.2) #flat prior = all 1s, = a thousand entries of 1s, takes the first value and repeats it a 1000 time
+likelihood <- dbinom( 2 , size=2, prob=p_grid ) #it is binomial (only right or wrong is an answer) that's why we use dbinom
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samplesT <- sample (p_grid, prob = posterior, size = 1e4, replace = TRUE)
+w <- rbinom(1e4, size=2, prob= 0.8)
+simplehist(w)
+w <- rbinom(1e4, size =12, prob= samplesT) #to see if we could really predict their performance on the new test we set the size to the "new" size of the test thats our number of the questions
+simplehist(w)
+table(w)/1e4
+#we would not expect Kristian to get only 8 right, anything above 8 would have been plausible 
+#Riccardo
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) #this is some strong overfittingin cause we have only 6 data-points (questions) to draw our knowledge from
+prior <-dnorm(p_grid,0.8,0.2)  #flat prior, thus all 1s, = a thousand entries of 1s, takes the first value and repeats it a 1000 time
+likelihood <- dbinom( 3 , size=6, prob=p_grid ) #itsbinomial (only right or wrong is possible in the questions) that's why we use dbinom
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samplesR <- sample (p_grid, prob = posterior, size = 1e4, replace = TRUE)
+w <- rbinom(1e4, size=6, prob= 0.8)
+simplehist(w)
+w <- rbinom(1e4, size =10, prob= samplesR) #to see if we could predict their performance on the new  test we set the size to the "new" size of the test that is our number of the questions
+simplehist(w)
+table(w)/1e4
+#Riccardo surprises and overwhelms our model a little, simply to good
+#Mikkel
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- dnorm(p_grid,0.8,0.2) 
+likelihood <- dbinom( 66 , size=132, prob=p_grid ) 
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samplesM <- sample (p_grid, prob = posterior, size = 1e4, replace = TRUE)
+w <- rbinom(1e4, size=66, prob= 0.8)
+simplehist(w)
+w <- rbinom(1e4, size =65, prob= samplesM) 
+simplehist(w)
+table(w)/1e4
+#pretty good predictions for Mikkel, he is still about the same as last year as it seems
+#JOSH
+p_grid <- seq( from=0 , to=1 , length.out=1000 ) 
+prior <- dnorm(p_grid,0.8,0.2) #centered around mean of 0.8, std of 0.2 
+likelihood <- dbinom( 160 , size=198, prob=p_grid ) 
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samplesJ <- sample (p_grid, prob = posterior, size = 1e4, replace = TRUE)
+w <- rbinom(1e4, size=66, prob= 0.8)
+simplehist(w)
+w <- rbinom(1e4, size =172, prob= samplesJ) 
+simplehist(w)
+table(w)/1e4
+#captured by last year's model too and we see that Josh's new score lies within our peak from the last year
+
+```
