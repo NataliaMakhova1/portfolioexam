@@ -1,6 +1,6 @@
 ---
 title: "Assignment 4 - Applying meta-analytic priors"
-author: "group 8"
+author: "Katarina Michelova, Natalia Makhova, Maria Mareckova, Alex Pasternakova"
 output: html_document
 ---
 
@@ -58,7 +58,10 @@ m = brm(MeanES|se(VarianceES) ~ 1  + (1|StudyID),
         )
 
 
-summary(m)
+summary(m) 
+#we get R = 1 which is good and also many effective samples
+
+
 # we are using Meta Data to get "real" prior
 # Estimate Est.Error l-95% CI u-95% CI Eff.Sample Rhat
 #Intercept    -0.66      0.38
@@ -75,8 +78,9 @@ summary(m)
 # summary(brm_out)
 
 pairs(m)
+pp_check(m)
 
-#library(brmstools)
+
 
 #forest(m, av_name = "Effect Size" )
 
@@ -88,13 +92,15 @@ Step 2: Prepare the pitch SD data from last year
 - Also, let's standardize the data, so that they are compatible with our meta-analytic prior (Cohen's d is measured in SDs).
 - Is there any structure in the dataset that we should account for with random effects? How would you implement that? Or, if you don't know how to do bayesian random effects, is there anything we would need to simplify in the dataset?
 
-#########
-- data comes from different studies as well as participants who did the task in multiple trials. So, we should  account for random effects. In our model, we decided to use ID as random intercept and trial as random slope. Also, we had to add trial as main effect. If we did not know how to add random effects, we would have to simplify the dataset and calculate the mean for each participant. 
+############
+- data comes from different studies as well as participants who did the task in multiple trials. So, we should  account for random effects. In our model, we decided to use ID as random intercept and trial as random slope. If we did not know how to add random effects, we would simplify the dataset  and calculate the mean for each participant. 
 
 ```{r}
 
 data_pitch <- read.xlsx("Assignment4PitchDatav2.xlsx")
 
+
+plot(data_pitch$PitchSD)
 
 
 pitch_trans <- data_pitch %>%
@@ -109,11 +115,11 @@ Step 3: Build a regression model predicting Pitch SD from Diagnosis.
 - how are the parameters of the likelihood distribution distributed? Which predictors should they be conditioned on?
 - use a skeptical/conservative prior for the effects of diagnosis. Remember you'll need to motivate it.
 - Describe and plot the estimates. Evaluate model quality
-#############
 
+###############
 First, we had to log transoform and scale the data because our outcome variable PitchSD is not normally distributed. We tried to use conservative priors with the mean of 0 and sd of 0.1:
 
-a ~ Normal(0,0.1) 
+a ~ Normal(0, 1) 
 b ~ Normal(0,0.1) 
 c ~ Normal (0,0.1)
 sigma ~ Cauchy(0,2) # cauchy - putting more weight between 0 and 2.. it is possible to get sigma at higher numbers (e.g.200) but the probility is very low (in normal dist. such high numbers are not possible)
@@ -130,7 +136,7 @@ range(dp$PitchSD) # -1.182089  4.854810
 PitchSD ~ Normal(mu,sigma) 
 mu = a+ b*diagnosis + c*trial
 a ~ Normal(0,0.1) # (0,2) very broad
-b ~ Normal(0,0.1) # we will get back to that
+b ~ Normal(0,0.1)
 sigma ~ Cauchy(0,2) # cauchy - putting more weight between 0 and 2.. it is possible to get sigma #at higher numbers (e.g.200) but the probility is very low (in normal dist. such high numbers are not possible)
 
 
@@ -138,17 +144,19 @@ sigma ~ Cauchy(0,2) # cauchy - putting more weight between 0 and 2.. it is possi
 m2 = brm(pitchSDLOGz ~ diagnosis +  trial + (1 + trial | ID),
          prior = c(prior(normal(0,0.1), class = Intercept),
         prior(normal(0,1), class = b, coef = trial),
-         prior(normal(0,0.1), class = b, coef = diagnosis),
+         prior(normal(0,1), class = b, coef = diagnosis),
          prior(cauchy(0,2), class = sigma)),
          data = pitch_trans,
          cores = 4,
          chain = 4,
          iter = 10000,
          warmup = 4000,
-         control = list(adapt_delta = 0.99)
+         control = list(adapt_delta = 0.99),
+         sample_prior = T
          )
 
-m2
+
+stanplot(m2)
 
 
 pairs(m2)
@@ -166,7 +174,6 @@ Step 4: Now re-run the model with the meta-analytic prior
 - Describe and plot the estimates. Evaluate model quality
 
 
-
 ```{r}
 
 m3 = brm(pitchSDLOGz ~ diagnosis +  trial + (1 + trial | ID),
@@ -179,14 +186,20 @@ m3 = brm(pitchSDLOGz ~ diagnosis +  trial + (1 + trial | ID),
          chain = 4,
          iter = 10000,
          warmup = 4000,
-         control = list(adapt_delta = 0.99)
+         control = list(adapt_delta = 0.99),
+        sample_prior = T
+
          )
+
+stanplot(m3)
 
 pairs(m3)
 summary(m3)
 plot(m3)
 
-
+plotDiagnostic(m3, start = 50, numSamples = 100, window = 0.2,
+  plotWAIC = F, plotPSRF = F, plotDIC = F, plotTrace = F,
+  graphicParameters = NULL, ...)
 
 
 
@@ -208,8 +221,34 @@ Step 5: Compare the models
 
 ```{r}
 
+
+#sampling
+prior_samp <- prior_samples(m2) 
+po_samp <- posterior_samples(m2)
+
+ggplot() +
+  geom_density(data = prior_samp, aes(x = b_diagnosis), fill = "red", alpha = 0.3)+
+  geom_density(data = po_samp, aes(x = b_diagnosis), fill = "blue", alpha = 0.3)+
+   labs(title = "difference between prior and posterior", 
+       subtitle = "regularizing prior",
+       caption = "red = prior\n blue = posterior")
+
+
+
+prior_samp_3 <- prior_samples(m3) 
+po_samp_3 <- posterior_samples(m3)
+
+ ggplot() +
+  geom_density(data = prior_samp_3, aes(x = b_diagnosis), fill = "red", alpha = 0.3)+
+  geom_density(data = po_samp_3, aes(x = b_diagnosis), fill = "blue", alpha = 0.3)+
+  labs(title = "difference between prior and posterior", 
+       subtitle = "regularizing prior",
+       caption = "red = prior\n blue = posterior") 
+
+
+
 x <- seq(from = -1, to = 2, by = 0.01)
-prior_c = dnorm(x,mean = 0, sd = 0.1)
+prior_c = dnorm(x,mean = 0, sd = 1)
 prior_m = dnorm(x,mean = 0.6, sd = 0.3)
 plot(x, prior_c, type = "l", col = "red")
 lines(x, prior_m, type = "l", col = "green")
@@ -222,6 +261,21 @@ pp_check(m2, nsamples = 1000)
 pp_check(m3, nsamples = 1000)
 
 
+
+
+#mod_wer <- predict(m2, summary = FALSE)
+
+# #the function
+# transfer <- function(dataframe1, PredictivePosterior) {
+#   dataframe1$on_log_scale <- dataframe1[[PredictivePosterior]]*sd(dataframe2$pitch_sd_log) +
+#     mean(dataframe2$pitch_sd_log)
+#   dataframe1$on_natural_scale <- exp(dataframe1$on_log_scale) 
+#   dataframe1$on_z_scale <- (dataframe1$on_natural_scale - mean(dataframe2$pitch_sd))/sd(dataframe2$pitch_sd)
+#   return(dataframe1)
+# }
+# #use the function
+# transfer(dataframe1, "PredictivePosterior")
+
 waic(m2, m3)
 
 
@@ -232,11 +286,6 @@ Step 6: Prepare a nice write up of the analysis and answer the questions at the 
 
 ```{r}
 
-#questions to Malte:
-#1. can we use random effects as we are using it, based on the idea from frequentis stat
-#2. what are we doin when Confidence intervals crossing 0
-#3. after doing comparrison (waic) model 2 is better, why? how to interpret?
-#4. divergent? plot?
 
 
 
@@ -268,4 +317,5 @@ summary(brm_out1)
 plot(brm_out1)
 
 ```
+
 
