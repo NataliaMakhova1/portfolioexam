@@ -1,0 +1,159 @@
+---
+title: "exam_Natalia Makhova"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+library(metafor)
+library(lme4)
+library(brms)
+library(tidyverse)
+
+library(openxlsx)
+library(ggplot2)
+#install.packages("LearnBayes")
+library(LearnBayes)
+
+setwd("C:/Users/natal/Google Drive/study/4 semester/social and cultural dynamics in cognition/exam")
+
+
+```
+
+#loading dataset and explore the data
+
+```{r preprocess}
+
+exam <- read.xlsx("exam dataset.xlsx")
+exam_sub <- subset(exam, Session ==2)
+
+range(exam_sub$Age)
+#[1] 24 64
+hist(exam_sub$Age)
+
+range(exam_sub$Diff)
+#[1]  2 26
+
+w <- table(exam_sub$Gender)
+w
+#female   male 
+#    18     12 
+
+
+g <- ggplot(exam_sub, aes(Gender, stat="count", colour = Gender))
+# Number of cars in each class:
+
+g + geom_bar(aes(fill= Gender))
+
+
+g + geom_bar(aes(fill=Gender)) + 
+  facet_wrap(~exam_sub$Condition)
+
+exam_sub$Diff <- as.numeric(exam_sub$Diff)
+exam_sub$Condition <- as.factor(exam_sub$Condition)
+
+
+
+```
+
+
+```{r model}
+
+#m_0<- lmer(Diff~Condition, data = exam)
+#defining contrast - how model using our factors between itself. whether it's all compared to baseline or differently. we need differently.
+exam_sub$baseline_avcon <- ifelse(exam_sub$Condition == 0, -2, 1) #othogonal contrast comparing baseline with average of the other 2 conditions)
+exam_sub$con1_con2 <- ifelse(exam_sub$Condition == 0, 0, ifelse(exam_sub$Condition ==1, 0.5, -0.5)) #represents what's the difference between con 1 and con2
+
+m_1 <- brm(Diff~baseline_avcon + con1_con2,
+           data = exam_sub)
+
+pp_check(m_1) +
+  facet_wrap(~exam_sub$Condition)
+
+#from seeing it, gaussian is ok, but not really judging by results.
+
+summary(m_1)
+#this isn't good enough model
+
+
+#equivalence testing - hypothesis function with brms, where we can specify our hypothesis ourselves.
+hypothesis(m_1, "con1_con2 = 0") #not working... :(
+
+#___________
+
+#poisson family works better because it fits data generating process better, varience equals mean
+
+
+m_2 <- brm(Diff~baseline_avcon + con1_con2,
+           data = exam_sub, family = poisson)
+
+summary(m_2)
+
+pp_check(m_2) +
+  facet_wrap(~exam_sub$Condition)
+
+
+get_prior(Diff~baseline_avcon + con1_con2,
+          
+           data = exam_sub, family = poisson)
+
+#write strong arguments about priors.
+
+m_3 <- brm(Diff~baseline_avcon + con1_con2,
+           prior = c(prior(normal(0, 10), class="Intercept"), #0 is mean 10 is a large Sd
+                     prior(normal(0, 15), class = "b")), #0 is mean, 15 is how big of a difference could be between 2 con
+           sample_prior = T,      
+                  data = exam_sub, family = poisson)
+
+
+summary(m_3)
+
+pairs(m_3)
+plot(m_3)
+plot(marginal_effects(m_3), ask = FALSE)
+stanplot(m_3)
+
+
+pp_check(m_3) +
+  facet_wrap(~exam_sub$Condition)
+
+prior_samp <- prior_samples(m_3)
+po_samp <- posterior_samples(m_3)
+
+# ggplot() +
+#   geom_density(data = prior_samp, aes(x = b), fill = "red", alpha = 0.3)+
+#   geom_density(data = po_samp, aes(x = b_baseline_avcon), fill = "blue", alpha = 0.3)+
+#    labs(title = "difference between prior and posterior", 
+#        subtitle = "regularizing prior",
+#        caption = "red = prior\n blue = posterior")
+# 
+# 
+# ggplot() +
+#   geom_density(data = prior_samp, aes(x = b), fill = "red", alpha = 0.3)+
+#   geom_density(data = po_samp, aes(x = b_con1_con2), fill = "blue", alpha = 0.3)+
+#    labs(title = "difference between prior and posterior", 
+#        subtitle = "regularizing prior",
+#        caption = "red = prior\n blue = posterior")
+
+
+#overdespertion by adding random effect, just to let model know that there might be more variation then it assums with poisson likelihood (=family)
+#in this model the contrast between 1 and 2 condition is much more uncertain.
+m_4 <- brm(Diff~baseline_avcon + con1_con2 +(1|ID),
+           prior = c(prior(normal(0, 10), class="Intercept"), #0 is mean 10 is a large Sd
+                     prior(normal(0, 15), class = "b"), #0 is mean, 15 is how big of a difference could be between 2 con
+                     prior(normal(0, 1), class = "sd")), 
+           data = exam_sub, family = poisson)
+
+summary(m_4)
+stanplot(m_3)
+
+pp_check(m_4) +
+  facet_wrap(~exam_sub$Condition)
+
+#make considaration: choosing between model - information criteria waic
+
+waic(m_3, m_4)
+
+```
