@@ -147,7 +147,7 @@ m_4 <- brm(Diff~baseline_avcon + con1_con2 +(1|ID),
            data = exam_sub, family = poisson)
 
 summary(m_4)
-stanplot(m_3)
+stanplot(m_4)
 
 pp_check(m_4) +
   facet_wrap(~exam_sub$Condition)
